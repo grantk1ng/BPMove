@@ -34,6 +34,7 @@ export function DebugScreen() {
     connectionState,
     devices,
     startScan,
+    stopScan,
     connect,
     disconnect,
   } = useHeartRate();
@@ -163,18 +164,24 @@ export function DebugScreen() {
               <Text style={styles.buttonText}>Scan for Devices</Text>
             </TouchableOpacity>
           )}
-          {connectionState === 'scanning' &&
-            devices.map(device => (
-              <TouchableOpacity
-                key={device.id}
-                style={styles.deviceRow}
-                onPress={() => connect(device.id)}>
-                <Text style={styles.deviceName}>
-                  {device.name ?? 'Unknown'}
-                </Text>
-                <Text style={styles.deviceRssi}>{device.rssi} dBm</Text>
+          {connectionState === 'scanning' && (
+            <>
+              <TouchableOpacity style={styles.buttonDanger} onPress={stopScan}>
+                <Text style={styles.buttonText}>Stop Scanning</Text>
               </TouchableOpacity>
-            ))}
+              {devices.map(device => (
+                <TouchableOpacity
+                  key={device.id}
+                  style={styles.deviceRow}
+                  onPress={() => connect(device.id)}>
+                  <Text style={styles.deviceName}>
+                    {device.name ?? 'Unknown'}
+                  </Text>
+                  <Text style={styles.deviceRssi}>{device.rssi} dBm</Text>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
           {connectionState === 'connected' && (
             <TouchableOpacity style={styles.buttonDanger} onPress={disconnect}>
               <Text style={styles.buttonText}>Disconnect</Text>
