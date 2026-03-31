@@ -24,6 +24,10 @@ export function useHeartRate() {
           if (state === 'scanning') {
             setDevices([]);
           }
+          if (state === 'disconnected' || state === 'error') {
+            setCurrentHR(null);
+            setLastReading(null);
+          }
         },
       ),
       eventBus.on('hr:scanResult', (device: BleDeviceInfo) => {

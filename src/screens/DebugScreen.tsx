@@ -21,9 +21,11 @@ import {HR_ZONE_PRESETS, createDefaultConfig} from '../modules/algorithm/presets
 import type {HRZone, AlgorithmMode, AlgorithmConfig} from '../modules/algorithm/types';
 import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
 import {HeartRateDisplay} from '../components/HeartRateDisplay';
+import {HeartRateGraph} from '../components/HeartRateGraph';
 import {ZoneSelector} from '../components/ZoneSelector';
 import {NowPlaying} from '../components/NowPlaying';
 import {EventLogView} from '../components/EventLogView';
+import {useHRHistory} from '../modules/heartrate/useHRHistory';
 import {formatDuration} from '../utils/formatters';
 import {requestBlePermissions} from '../utils/permissions';
 import type {SessionLog} from '../modules/logging/types';
@@ -57,6 +59,7 @@ export function DebugScreen() {
     stopSession,
   } = useSessionLog();
 
+  const {history: hrHistory} = useHRHistory();
   const [selectedZone, setSelectedZone] = useState<HRZone>(HR_ZONE_PRESETS[0]);
   const [currentMode, setCurrentMode] = useState<AlgorithmMode>('MAINTAIN');
   const [lastSessionLog, setLastSessionLog] = useState<SessionLog | null>(null);
@@ -152,6 +155,15 @@ export function DebugScreen() {
           bpm={currentHR}
           mode={currentMode}
           zoneColor={getZoneColor()}
+        />
+
+        {/* Real-time Heart Rate Graph */}
+        <HeartRateGraph
+          data={hrHistory}
+          zoneMin={selectedZone.minBPM}
+          zoneMax={selectedZone.maxBPM}
+          zoneColor={selectedZone.color}
+          connected={connectionState === 'connected'}
         />
 
         {/* BLE Connection */}
