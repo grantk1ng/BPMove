@@ -8,7 +8,10 @@ import {createDefaultConfig} from '../modules/algorithm/presets';
 import {MusicLibraryManager} from '../modules/music/MusicLibraryManager';
 import {MusicPlayerService} from '../modules/music/MusicPlayerService';
 import {SessionLogger} from '../modules/logging/SessionLogger';
-import {DebugScreen} from '../screens/DebugScreen';
+import {LocalTrackProvider} from '../modules/music/providers/LocalTrackProvider';
+import {SpotifyTrackProvider} from '../modules/music/providers/spotify/SpotifyTrackProvider';
+import {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
+import {AppNavigator} from '../navigation/AppNavigator';
 
 function initializeServices(): void {
   // Order matters: algorithm engine subscribes to EventBus first,
@@ -28,6 +31,15 @@ function initializeServices(): void {
   const musicService = new MusicPlayerService(libraryManager);
   ServiceRegistry.register('music', musicService);
 
+  const spotifyProvider = new SpotifyTrackProvider();
+  const localProvider = new LocalTrackProvider();
+  const providerManager = new TrackProviderManager(
+    [spotifyProvider, localProvider],
+    libraryManager,
+    musicService,
+  );
+  ServiceRegistry.register('trackProvider', providerManager);
+
   const logger = new SessionLogger();
   ServiceRegistry.register('logging', logger);
 }
@@ -38,26 +50,31 @@ export default function App() {
   useEffect(() => {
     initializeServices();
 
-    // Set up music player (async)
+    const providerManager =
+      ServiceRegistry.get<TrackProviderManager>('trackProvider');
     const musicService = ServiceRegistry.get<MusicPlayerService>('music');
-    musicService
-      .setup()
+
+    providerManager
+      .initialize()
       .then(() => {
         musicService.start();
         setReady(true);
       })
       .catch(() => {
-        // Music player setup may fail in development without native module
+        // Provider initialization may fail in development without native modules
+        musicService.start();
         setReady(true);
       });
 
     return () => {
-      // Cleanup on unmount
       const hr = ServiceRegistry.get<HeartRateService>('heartrate');
       hr.destroy();
       const algo = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
       algo.destroy();
       musicService.destroy();
+      providerManager.destroy();
+      const logger = ServiceRegistry.get<SessionLogger>('logging');
+      logger.destroy();
       ServiceRegistry.clear();
     };
   }, []);
@@ -73,9 +90,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <DebugScreen />
-      </SafeAreaView>
+      <AppNavigator />
     </SafeAreaProvider>
   );
 }

@@ -7,8 +7,8 @@ export interface TrackMetadata {
   durationSeconds: number;
   /** Beats per minute — the critical field for selection */
   bpm: number;
-  /** Path or URI to the audio file */
-  url: string;
+  /** Path, URI, or Metro require() asset ID for the audio file */
+  url: string | number;
   /** Optional artwork URI */
   artworkUrl: string | null;
   /** Genre tag if available */

@@ -30,26 +30,6 @@ function makeReading(
   };
 }
 
-function feedReadings(
-  strategy: LinearStrategy,
-  state: AlgorithmState,
-  config: AlgorithmConfig,
-  readings: HeartRateReading[],
-): {state: AlgorithmState; targets: Array<{targetBPM: number; mode: string}>} {
-  let currentState = state;
-  const targets: Array<{targetBPM: number; mode: string}> = [];
-
-  for (const reading of readings) {
-    const result = strategy.compute(reading, currentState, config);
-    currentState = result.nextState;
-    if (result.target) {
-      targets.push({targetBPM: result.target.targetBPM, mode: result.target.mode});
-    }
-  }
-
-  return {state: currentState, targets};
-}
-
 describe('LinearStrategy', () => {
   let strategy: LinearStrategy;
 

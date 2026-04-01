@@ -17,6 +17,9 @@ end
 target 'BPMove' do
   config = use_native_modules!
 
+  # react-native-events does not support autolinking — required by react-native-spotify-remote
+  pod 'RNEventEmitter', :path => "../node_modules/react-native-spotify-remote/node_modules/react-native-events"
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.

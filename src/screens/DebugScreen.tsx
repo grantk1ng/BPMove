@@ -6,7 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
 import {eventBus} from '../core/EventBus';
 import {ServiceRegistry} from '../core/ServiceRegistry';
 import {useHeartRate} from '../modules/heartrate/useHeartRate';
@@ -18,7 +21,7 @@ import {
   exportJSON,
 } from '../modules/logging/LogExporter';
 import {HR_ZONE_PRESETS, createDefaultConfig} from '../modules/algorithm/presets';
-import type {HRZone, AlgorithmMode, AlgorithmConfig} from '../modules/algorithm/types';
+import type {HRZone, AlgorithmMode} from '../modules/algorithm/types';
 import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
 import {HeartRateDisplay} from '../components/HeartRateDisplay';
 import {HeartRateGraph} from '../components/HeartRateGraph';
@@ -28,6 +31,16 @@ import {EventLogView} from '../components/EventLogView';
 import {useHRHistory} from '../modules/heartrate/useHRHistory';
 import {formatDuration} from '../utils/formatters';
 import {requestBlePermissions} from '../utils/permissions';
+import {
+  saveSession,
+  loadSessionIndex,
+  loadSession,
+} from '../modules/logging/SessionStore';
+import type {SessionSummary} from '../modules/logging/SessionStore';
+import {
+  startBackgroundSession,
+  stopBackgroundSession,
+} from '../modules/background';
 import type {SessionLog} from '../modules/logging/types';
 
 export function DebugScreen() {
@@ -63,12 +76,17 @@ export function DebugScreen() {
   const [selectedZone, setSelectedZone] = useState<HRZone>(HR_ZONE_PRESETS[0]);
   const [currentMode, setCurrentMode] = useState<AlgorithmMode>('MAINTAIN');
   const [lastSessionLog, setLastSessionLog] = useState<SessionLog | null>(null);
+  const [pastSessions, setPastSessions] = useState<SessionSummary[]>([]);
 
   useEffect(() => {
     const unsub = eventBus.on('algo:modeChanged', event => {
       setCurrentMode(event.to);
     });
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    loadSessionIndex().then(setPastSessions).catch(() => {});
   }, []);
 
   const handleStartSession = useCallback(async () => {
@@ -90,18 +108,30 @@ export function DebugScreen() {
 
     startSession(config as unknown as Record<string, unknown>);
     setCurrentMode('MAINTAIN');
+
+    startBackgroundSession().catch(() => {});
   }, [selectedZone, startSession]);
 
-  const handleStopSession = useCallback(() => {
+  const handleStopSession = useCallback(async () => {
     const engine = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
     engine.stop();
 
     const log = stopSession('user');
     setLastSessionLog(log);
+
+    stopBackgroundSession().catch(() => {});
+
+    try {
+      await saveSession(log);
+      const updated = await loadSessionIndex();
+      setPastSessions(updated);
+    } catch {
+      // Persistence is best-effort — session is still in local state for export
+    }
   }, [stopSession]);
 
   const handleExport = useCallback(
-    (format: 'timeseries' | 'events' | 'json') => {
+    async (format: 'timeseries' | 'events' | 'json') => {
       if (!lastSessionLog) {
         Alert.alert('No Session', 'Complete a session first to export data.');
         return;
@@ -109,30 +139,60 @@ export function DebugScreen() {
 
       let content: string;
       let filename: string;
+      let mimeType: string;
 
       switch (format) {
         case 'timeseries':
           content = exportTimeSeriesCSV(lastSessionLog);
           filename = `bpmove-timeseries-${lastSessionLog.sessionId}.csv`;
+          mimeType = 'text/csv';
           break;
         case 'events':
           content = exportEventsCSV(lastSessionLog);
           filename = `bpmove-events-${lastSessionLog.sessionId}.csv`;
+          mimeType = 'text/csv';
           break;
         case 'json':
           content = exportJSON(lastSessionLog);
           filename = `bpmove-session-${lastSessionLog.sessionId}.json`;
+          mimeType = 'application/json';
           break;
       }
 
-      // TODO: Write to file system and share via react-native-share
-      Alert.alert(
-        'Export Ready',
-        `${filename}\n${content.length} characters\n\nFile sharing will be available after react-native-fs and react-native-share are installed.`,
-      );
+      try {
+        const dir = Platform.OS === 'ios'
+          ? RNFS.DocumentDirectoryPath
+          : RNFS.CachesDirectoryPath;
+        const filePath = `${dir}/${filename}`;
+
+        await RNFS.writeFile(filePath, content, 'utf8');
+        await Share.open({
+          url: `file://${filePath}`,
+          type: mimeType,
+          filename,
+        });
+      } catch (err: unknown) {
+        const dismissed = err instanceof Error && err.message.includes('User did not share');
+        if (!dismissed) {
+          Alert.alert('Export Failed', err instanceof Error ? err.message : 'Unknown error');
+        }
+      }
     },
     [lastSessionLog],
   );
+
+  const handleLoadPastSession = useCallback(async (sessionId: string) => {
+    try {
+      const log = await loadSession(sessionId);
+      if (log) {
+        setLastSessionLog(log);
+      } else {
+        Alert.alert('Error', 'Session data not found.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to load session.');
+    }
+  }, []);
 
   const getZoneColor = () => {
     switch (currentMode) {
@@ -269,6 +329,27 @@ export function DebugScreen() {
             </View>
           </View>
         )}
+        {/* Past Sessions */}
+        {pastSessions.length > 0 && !sessionActive && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Past Sessions</Text>
+            {pastSessions.slice(0, 5).map(session => (
+              <TouchableOpacity
+                key={session.sessionId}
+                style={styles.pastSessionRow}
+                onPress={() => handleLoadPastSession(session.sessionId)}>
+                <Text style={styles.pastSessionDate}>
+                  {new Date(session.startTime).toLocaleDateString()}{' '}
+                  {new Date(session.startTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                </Text>
+                <Text style={styles.pastSessionMeta}>
+                  {formatDuration(session.durationMs)}
+                  {session.metadata.avgHeartRate ? ` | avg ${session.metadata.avgHeartRate} bpm` : ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Event Log (bottom half) */}
@@ -372,6 +453,21 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 12,
     fontWeight: '500',
+  },
+  pastSessionRow: {
+    backgroundColor: '#2a2a2a',
+    padding: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  pastSessionDate: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  pastSessionMeta: {
+    color: '#888',
+    fontSize: 12,
   },
   logContainer: {
     height: 200,

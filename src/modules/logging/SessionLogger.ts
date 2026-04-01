@@ -110,6 +110,13 @@ export class SessionLogger {
     };
   }
 
+  destroy(): void {
+    if (this.active) {
+      this.stop();
+    }
+    this.unsubscribers = [];
+  }
+
   isActive(): boolean {
     return this.active;
   }

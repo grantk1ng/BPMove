@@ -32,4 +32,10 @@ export interface EventMap {
 
   'session:started': {sessionId: string};
   'session:ended': {sessionId: string; reason: string};
+
+  'provider:loading': {providerName: string};
+  'provider:ready': {providerName: string; trackCount: number};
+  'provider:error': {providerName: string; error: string};
+  'provider:fallback': {from: string; to: string; reason: string};
+  'music:trackSwitchBlocked': {reason: string; cooldownRemainingMs: number};
 }
