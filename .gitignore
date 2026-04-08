@@ -2,6 +2,12 @@
 .env
 .env.local
 
+# Claude Code
+.claude/
+
+# R
+.Rhistory
+
 # OSX
 #
 .DS_Store
