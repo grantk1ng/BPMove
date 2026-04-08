@@ -1,6 +1,7 @@
 import type {TrackMetadata} from '../types';
+import type {Result} from '../../../contracts/results';
 
-export type Result<T> = {ok: true; data: T} | {ok: false; error: string};
+export type {Result} from '../../../contracts/results';
 
 export type ProviderStatus =
   | 'idle'

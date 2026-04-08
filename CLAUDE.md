@@ -62,6 +62,8 @@ All native module mocks live in `__mocks__/`:
 
 ## Architecture
 
+> **Decision log:** [`docs/decisions/decision-log.md`](docs/decisions/decision-log.md) — read before proposing architectural changes.
+
 BPMove is a React Native app that reads heart rate from a Bluetooth monitor and adaptively selects music BPM to keep the user in a target HR zone.
 
 ### Service Layer
@@ -170,7 +172,8 @@ Config accessed via `src/config/env.ts`. See `.env.example` for the template.
 - **Named exports** over default exports. Exception: `App.tsx` uses default export as required by React Native.
 - **Barrel files** (`index.ts`) already exist per module directory. Maintain them when adding new exports.
 - **Colocate tests.** `__tests__/` directory next to the code it tests.
-- **Error handling:** Use typed Result patterns (`{ ok: true, data } | { ok: false, error }`) for operations that can fail (BLE connection, API calls, Spotify auth). React Error Boundaries for UI-level crashes.
+- **Error handling:** Use typed Result patterns (`{ ok: true, data } | { ok: false, error }`) for operations that can fail (BLE connection, API calls, Spotify auth). `Result<T>` is defined in `src/contracts/results.ts`. React Error Boundaries for UI-level crashes.
+- **Shared types:** `src/contracts/index.ts` re-exports all cross-module types. Prefer importing from `../contracts` when a type crosses module boundaries.
 - **No magic numbers.** All thresholds, zone boundaries, and BPM ranges go in constants.
 - **Domain logic stays in services.** React components and hooks never contain business logic. Hooks read from the EventBus; components render what hooks give them.
 
