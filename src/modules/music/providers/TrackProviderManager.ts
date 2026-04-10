@@ -8,6 +8,8 @@ export class TrackProviderManager {
   private libraryManager: MusicLibraryManager;
   private musicService: MusicPlayerService;
   private activeProvider: TrackProvider | null = null;
+  private providerErrors: Map<string, string> = new Map();
+  private initialized = false;
 
   constructor(
     providers: TrackProvider[],
@@ -22,11 +24,19 @@ export class TrackProviderManager {
   }
 
   async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+
     for (const provider of this.providers) {
+      console.log(`[TrackProvider] Trying provider: ${provider.info.name}`);
       eventBus.emit('provider:loading', {providerName: provider.info.name});
 
       const available = await provider.isAvailable();
+      console.log(`[TrackProvider] ${provider.info.name} isAvailable:`, JSON.stringify(available));
       if (!available.ok) {
+        this.providerErrors.set(provider.info.name, available.error);
         eventBus.emit('provider:error', {
           providerName: provider.info.name,
           error: available.error,
@@ -35,6 +45,7 @@ export class TrackProviderManager {
       }
 
       if (!available.data) {
+        this.providerErrors.set(provider.info.name, 'Provider not available');
         eventBus.emit('provider:error', {
           providerName: provider.info.name,
           error: 'Provider not available',
@@ -42,8 +53,11 @@ export class TrackProviderManager {
         continue;
       }
 
+      console.log(`[TrackProvider] ${provider.info.name} loading tracks...`);
       const result = await provider.loadTracks();
+      console.log(`[TrackProvider] ${provider.info.name} loadTracks:`, result.ok ? `${result.data.length} tracks` : result.error);
       if (!result.ok) {
+        this.providerErrors.set(provider.info.name, result.error);
         eventBus.emit('provider:error', {
           providerName: provider.info.name,
           error: result.error,
@@ -70,6 +84,10 @@ export class TrackProviderManager {
 
   getActiveProvider(): TrackProvider | null {
     return this.activeProvider;
+  }
+
+  getProviderError(providerName: string): string | null {
+    return this.providerErrors.get(providerName) ?? null;
   }
 
   async destroy(): Promise<void> {

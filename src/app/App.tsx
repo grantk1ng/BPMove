@@ -14,9 +14,9 @@ import {TrackProviderManager} from '../modules/music/providers/TrackProviderMana
 import {AppNavigator} from '../navigation/AppNavigator';
 
 function initializeServices(): void {
-  // Order matters: algorithm engine subscribes to EventBus first,
-  // so its handler runs before the SessionLogger's hr:reading handler.
-  // This ensures algo state is cached before time-series rows are built.
+  if (ServiceRegistry.has('heartrate')) {
+    return;
+  }
 
   const hrService = new HeartRateService();
   ServiceRegistry.register('heartrate', hrService);
@@ -48,6 +48,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     initializeServices();
 
     const providerManager =
@@ -57,25 +59,22 @@ export default function App() {
     providerManager
       .initialize()
       .then(() => {
+        if (cancelled) {
+          return;
+        }
         musicService.start();
         setReady(true);
       })
       .catch(() => {
-        // Provider initialization may fail in development without native modules
+        if (cancelled) {
+          return;
+        }
         musicService.start();
         setReady(true);
       });
 
     return () => {
-      const hr = ServiceRegistry.get<HeartRateService>('heartrate');
-      hr.destroy();
-      const algo = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
-      algo.destroy();
-      musicService.destroy();
-      providerManager.destroy();
-      const logger = ServiceRegistry.get<SessionLogger>('logging');
-      logger.destroy();
-      ServiceRegistry.clear();
+      cancelled = true;
     };
   }, []);
 

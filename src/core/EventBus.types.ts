@@ -29,6 +29,7 @@ export interface EventMap {
   'music:changed': TrackMetadata;
   'music:playbackStateChanged': PlaybackState;
   'music:error': {message: string};
+  'music:trackEnded': {trackId: string};
 
   'session:started': {sessionId: string};
   'session:ended': {sessionId: string; reason: string};

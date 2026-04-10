@@ -64,7 +64,49 @@ The EventBus's `EventMap` interface enforces correct event payloads at compile t
 
 **Why:** Demo safety. The local provider _guarantees_ music plays regardless of network, accounts, or API keys. Spotify is additive — it provides a larger catalog and fills the 140–174 BPM gap. The `TrackProvider` interface means `MusicPlayerService` doesn't know or care which source is active. Adding a third provider (Apple Music, YouTube Music, local file picker) requires only implementing the interface and adding it to the constructor in `App.tsx`.
 
-**Tradeoff:** The provider abstraction adds complexity. `TrackMetadata.url` is `string | number` — string for Spotify URIs, number for Metro `require()` asset IDs — which leaks the abstraction. Each provider owns its own playback implementation (`playTrack`, `pause`, `resume`, `stop`, `getPosition`), duplicating control logic between LocalTrackProvider (react-native-track-player) and SpotifyTrackProvider (Spotify App Remote). Provider switching is initialization-only — no runtime hot-swap if Spotify drops mid-session.
+**Tradeoff:** The provider abstraction adds complexity. `TrackMetadata.url` is `string | number` — string for Spotify URIs, number for Metro `require()` asset IDs — which leaks the abstraction. Each provider owns its own playback implementation (`playTrack`, `pause`, `resume`, `stop`, `getPosition`), duplicating control logic between LocalTrackProvider (react-native-track-player) and SpotifyTrackProvider (Spotify Web API via `SpotifyWebPlayback.ts`). Provider switching is initialization-only — no runtime hot-swap if Spotify drops mid-session.
+
+---
+
+## ADR-006: Spotify Web API over App Remote SDK for Playback
+
+**Before:** `SpotifyTrackProvider` used both `SpotifyAuth` (OAuth) and `SpotifyRemote` (App Remote SDK) from `react-native-spotify-remote`. Auth handled token acquisition, App Remote handled playback control.
+
+**Problem:** The Spotify iOS SDK v1.2.1 bundled in `react-native-spotify-remote` is incompatible with the current Spotify app. `SpotifyRemote.connect()` immediately disconnects with "End of stream." The library is unmaintained (last updated 2021). Auth works fine — only the App Remote connection is broken.
+
+**After:** Auth stays with `SpotifyAuth.authorize()` from `react-native-spotify-remote`. All playback control moved to `SpotifyWebPlayback.ts` — a thin HTTP client calling Spotify Web API endpoints (`/v1/me/player/*`). Device discovery, play, pause, resume, and playback state are all REST calls using the OAuth access token.
+
+**Why:** The Web API is stable, well-documented, and doesn't depend on a native SDK binary matching the Spotify app version. The access token from `SpotifyAuth.authorize()` works directly with the Web API — no additional auth flow needed. Track-ended detection uses polling (`getPlaybackState` every 2s) checking `progressMs >= durationMs - 1000` and `!isPlaying`.
+
+**Tradeoff:** Web API requires an active Spotify device (phone must have Spotify open). Playback state is polled (2s interval) rather than push-based — track end detection has up to 2s latency. Web API requires Spotify Premium for playback control. The `react-native-spotify-remote` dependency is now only used for its auth module — a lighter auth-only library could replace it, but not worth the churn for a capstone demo.
+
+---
+
+## ADR-007: BPM Cache in AsyncStorage
+
+**Before:** Every app launch fetched BPM data from the SoundNet API for all tracks in the user's Spotify library.
+
+**Problem:** SoundNet's free tier has strict rate limits (429 responses above ~1 req/s). Fetching BPM for 20 tracks at 1.5s intervals takes ~30s. Repeating this on every launch wastes time and API quota.
+
+**After:** `BPMCache.ts` wraps AsyncStorage with keys `bpmove:bpm:{trackId}`. `SoundNetClient.lookupBPMBatch()` checks the cache first and only fetches uncached tracks. New results are written to cache after the batch completes.
+
+**Why:** BPM data for a given Spotify track ID never changes. Cache-first eliminates redundant API calls — subsequent launches skip the 30s lookup entirely for previously seen tracks.
+
+**Tradeoff:** AsyncStorage has no TTL mechanism — cached BPM values persist forever. If SoundNet returns incorrect data, it stays cached until the user clears app data. No cache invalidation strategy exists.
+
+---
+
+## ADR-008: Recent Track History for Skip Variety
+
+**Before:** `TrackSelector.selectTrack()` took a single `currentTrackId` and picked the track with the closest BPM to the target. `MusicPlayerService.skip()` duplicated the selection logic inline. Neither the algorithm nor skip had any memory of recently played tracks.
+
+**Problem:** With a narrow BPM target (e.g., 145 BPM), only 1–2 tracks in the library are closest. The user skips to track B, but 12 seconds later the algorithm fires `selectAndPlay()`, picks track A (the closest match) and snaps playback back. The algorithm and user fight over the same 2 tracks. Skipping feels broken — the app appears to restart the same song.
+
+**After:** `selectTrack()` takes `recentTrackIds: string[]` instead of `currentTrackId`. It uses a 5 BPM tolerance window (`BPM_TOLERANCE = 5`) so nearby tracks are all eligible, and avoids recent tracks (falling back only if no fresh candidates exist). `MusicPlayerService` maintains a shared `recentTrackIds` ring buffer (`RECENT_TRACK_HISTORY_SIZE = 5`) used by both `skip()` and `selectAndPlay()`. `skip()` now delegates to `selectTrack()` instead of duplicating selection logic.
+
+**Why:** The shared history means the algorithm respects the user's skips — it won't snap back to a track the user just rejected. The 5 BPM tolerance widens the candidate pool so there's more variety even when the target BPM is stable. Keeping `selectTrack` as a pure function (history passed in, not stored internally) maintains testability.
+
+**Tradeoff:** The tolerance window means the algorithm may play a track that's up to 5 BPM off the ideal target, slightly reducing BPM precision. The 5-track history is arbitrary — too small and you still alternate, too large and you exhaust candidates in a small library. With 43 Spotify tracks across 100–200 BPM, 5 is a reasonable balance.
 
 ---
 

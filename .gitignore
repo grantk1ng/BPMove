@@ -5,6 +5,10 @@
 # Claude Code
 .claude/
 
+# Superpowers (Claude Code plugin artifacts)
+.superpowers/
+docs/superpowers/
+
 # R
 .Rhistory
 

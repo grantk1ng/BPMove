@@ -1,14 +1,34 @@
 import {useState, useEffect, useCallback, useRef} from 'react';
+import {eventBus} from '../../core/EventBus';
 import {ServiceRegistry} from '../../core/ServiceRegistry';
 import type {SessionLogger} from './SessionLogger';
 import type {SessionLog} from './types';
 
 export function useSessionLog() {
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(() => {
+    const logger = ServiceRegistry.get<SessionLogger>('logging');
+    return logger.isActive();
+  });
   const [elapsedMs, setElapsedMs] = useState(0);
   const [entryCount, setEntryCount] = useState(0);
   const [timeSeriesCount, setTimeSeriesCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const unsubs = [
+      eventBus.on('session:started', () => {
+        setIsActive(true);
+        setElapsedMs(0);
+        setEntryCount(0);
+        setTimeSeriesCount(0);
+      }),
+      eventBus.on('session:ended', () => {
+        setIsActive(false);
+      }),
+    ];
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, []);
 
   useEffect(() => {
     if (isActive) {
@@ -35,12 +55,7 @@ export function useSessionLog() {
   const startSession = useCallback(
     (config: Record<string, unknown>): string => {
       const logger = ServiceRegistry.get<SessionLogger>('logging');
-      const sessionId = logger.start(config);
-      setIsActive(true);
-      setElapsedMs(0);
-      setEntryCount(0);
-      setTimeSeriesCount(0);
-      return sessionId;
+      return logger.start(config);
     },
     [],
   );
@@ -48,9 +63,7 @@ export function useSessionLog() {
   const stopSession = useCallback(
     (reason: 'user' | 'error' | 'timeout' = 'user'): SessionLog => {
       const logger = ServiceRegistry.get<SessionLogger>('logging');
-      const log = logger.stop(reason);
-      setIsActive(false);
-      return log;
+      return logger.stop(reason);
     },
     [],
   );

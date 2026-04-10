@@ -1,12 +1,14 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView} from 'react-native';
 import {ServiceRegistry} from '../core/ServiceRegistry';
+import {eventBus} from '../core/EventBus';
 import type {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
 import {SPOTIFY_CLIENT_ID} from '../config/env';
 
 export function SettingsScreen({navigation}: {navigation: {navigate: (screen: string) => void}}) {
   const [providerName, setProviderName] = useState<string>('none');
   const [trackCount, setTrackCount] = useState(0);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -14,6 +16,10 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
       const active = pm.getActiveProvider();
       if (active) {
         setProviderName(active.info.name);
+      }
+      const error = pm.getProviderError('spotify');
+      if (error) {
+        setSpotifyError(error);
       }
     } catch {
       // Service not ready
@@ -29,6 +35,22 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
     } catch {
       // Service not ready
     }
+  }, []);
+
+  useEffect(() => {
+    const offReady = eventBus.on('provider:ready', ({providerName: name, trackCount: count}) => {
+      setProviderName(name);
+      setTrackCount(count);
+    });
+    const offError = eventBus.on('provider:error', ({providerName: name, error}) => {
+      if (name === 'spotify') {
+        setSpotifyError(error);
+      }
+    });
+    return () => {
+      offReady();
+      offError();
+    };
   }, []);
 
   const handleDebugPress = useCallback(() => {
@@ -64,6 +86,9 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
             Add SPOTIFY_CLIENT_ID and RAPIDAPI_KEY to your .env file to enable
             Spotify integration.
           </Text>
+        )}
+        {spotifyError && (
+          <Text style={styles.errorText}>{spotifyError}</Text>
         )}
       </View>
 
@@ -146,5 +171,11 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 15,
     fontWeight: '500',
+  },
+  errorText: {
+    color: '#FF5252',
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 4,
   },
 });
