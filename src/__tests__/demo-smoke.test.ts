@@ -184,7 +184,7 @@ describe('Demo Smoke Test', () => {
     }
 
     // Allow async track selection to complete
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
 
     expect(trackChanges.length).toBeGreaterThanOrEqual(1);
     expect(trackChanges[0].bpm).toBeGreaterThan(0);
@@ -209,7 +209,7 @@ describe('Demo Smoke Test', () => {
     }
 
     // Allow async operations to settle
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
 
     const log = logger.stop();
 
