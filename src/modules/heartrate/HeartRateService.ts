@@ -157,11 +157,23 @@ export class HeartRateService implements HeartRateServiceInterface {
   }
 }
 
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
 function base64ToBytes(base64: string): number[] {
-  const binaryString = atob(base64);
+  const stripped = base64.replace(/=+$/, '');
   const bytes: number[] = [];
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes.push(binaryString.charCodeAt(i));
+  for (let i = 0; i < stripped.length; i += 4) {
+    const a = B64.indexOf(stripped[i]);
+    const b = B64.indexOf(stripped[i + 1]);
+    const c = B64.indexOf(stripped[i + 2]);
+    const d = B64.indexOf(stripped[i + 3]);
+    bytes.push((a << 2) | (b >> 4));
+    if (c >= 0) {
+      bytes.push(((b & 15) << 4) | (c >> 2));
+    }
+    if (d >= 0) {
+      bytes.push(((c & 3) << 6) | d);
+    }
   }
   return bytes;
 }

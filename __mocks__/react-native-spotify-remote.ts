@@ -3,6 +3,7 @@ export const ApiScope = {
   UserLibraryReadScope: 'user-library-read',
   UserReadPlaybackStateScope: 'user-read-playback-state',
   UserReadCurrentlyPlayingScope: 'user-read-currently-playing',
+  UserModifyPlaybackStateScope: 'user-modify-playback-state',
   PlaylistReadPrivateScope: 'playlist-read-private',
 };
 

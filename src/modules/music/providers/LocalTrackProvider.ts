@@ -1,7 +1,10 @@
 import TrackPlayer, {
   AppKilledPlaybackBehavior,
   Capability,
+  Event,
+  State,
 } from 'react-native-track-player';
+import {eventBus} from '../../../core/EventBus';
 import type {TrackMetadata} from '../types';
 import type {
   TrackProvider,
@@ -15,6 +18,8 @@ export class LocalTrackProvider implements TrackProvider {
   readonly info: TrackProviderInfo = {name: 'local', priority: 10};
   private status: ProviderStatus = 'idle';
   private isPlayerSetup = false;
+  private currentTrackId: string | null = null;
+  private playbackSub: ReturnType<typeof TrackPlayer.addEventListener> | null = null;
 
   getStatus(): ProviderStatus {
     return this.status;
@@ -42,13 +47,14 @@ export class LocalTrackProvider implements TrackProvider {
       await TrackPlayer.reset();
       await TrackPlayer.add({
         id: track.id,
-        url: track.url,
+        url: track.url as string,
         title: track.title,
         artist: track.artist,
         duration: track.durationSeconds,
         artwork: track.artworkUrl ?? undefined,
       });
       await TrackPlayer.play();
+      this.currentTrackId = track.id;
       return {ok: true, data: undefined};
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -105,6 +111,8 @@ export class LocalTrackProvider implements TrackProvider {
   }
 
   async destroy(): Promise<void> {
+    this.playbackSub?.remove();
+    this.playbackSub = null;
     if (this.isPlayerSetup) {
       await TrackPlayer.reset();
     }
@@ -130,6 +138,15 @@ export class LocalTrackProvider implements TrackProvider {
       ],
       compactCapabilities: [Capability.Play, Capability.Pause],
     });
+
+    this.playbackSub = TrackPlayer.addEventListener(
+      Event.PlaybackState,
+      ({state}) => {
+        if (state === State.Ended && this.currentTrackId) {
+          eventBus.emit('music:trackEnded', {trackId: this.currentTrackId});
+        }
+      },
+    );
 
     this.isPlayerSetup = true;
   }

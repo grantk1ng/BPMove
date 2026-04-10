@@ -83,6 +83,7 @@ export class SessionLogger {
     );
 
     this.addEntry('session_start', {config});
+    eventBus.emit('session:started', {sessionId: this.sessionId});
 
     return this.sessionId;
   }
@@ -90,6 +91,7 @@ export class SessionLogger {
   stop(reason: 'user' | 'error' | 'timeout' = 'user'): SessionLog {
     this.addEntry('session_end', {reason});
     this.active = false;
+    eventBus.emit('session:ended', {sessionId: this.sessionId, reason});
 
     for (const unsub of this.unsubscribers) {
       unsub();

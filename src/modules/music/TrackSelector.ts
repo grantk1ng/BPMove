@@ -1,44 +1,36 @@
-import type {MusicLibrary, TrackMetadata, TrackSelection} from './types';
+import type {MusicLibrary, TrackSelection} from './types';
+
+const BPM_TOLERANCE = 5;
 
 /**
- * Pure function: selects the track closest to the target BPM.
- * Avoids repeating the current track when alternatives exist.
+ * Pure function: selects a track near the target BPM.
+ * Avoids recently played tracks when alternatives exist within tolerance.
  */
 export function selectTrack(
   targetBPM: number,
   library: MusicLibrary,
-  currentTrackId: string | null,
+  recentTrackIds: string[],
 ): TrackSelection | null {
   if (library.tracks.length === 0) {
     return null;
   }
 
-  // Find closest BPM match
-  let bestTracks: TrackMetadata[] = [];
-  let bestDelta = Infinity;
+  const sorted = [...library.tracks].sort(
+    (a, b) => Math.abs(a.bpm - targetBPM) - Math.abs(b.bpm - targetBPM),
+  );
 
-  for (const track of library.tracks) {
-    const delta = Math.abs(track.bpm - targetBPM);
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      bestTracks = [track];
-    } else if (delta === bestDelta) {
-      bestTracks.push(track);
-    }
-  }
+  const bestDelta = Math.abs(sorted[0].bpm - targetBPM);
+  const tolerance = Math.max(bestDelta, BPM_TOLERANCE);
 
-  // If possible, avoid repeating the current track
-  let selected: TrackMetadata;
-  if (bestTracks.length > 1 && currentTrackId) {
-    const alternatives = bestTracks.filter(t => t.id !== currentTrackId);
-    if (alternatives.length > 0) {
-      selected = alternatives[Math.floor(Math.random() * alternatives.length)];
-    } else {
-      selected = bestTracks[0];
-    }
-  } else {
-    selected = bestTracks[0];
-  }
+  const withinTolerance = sorted.filter(
+    t => Math.abs(t.bpm - targetBPM) <= tolerance,
+  );
+
+  const recentSet = new Set(recentTrackIds);
+  const fresh = withinTolerance.filter(t => !recentSet.has(t.id));
+  const candidates = fresh.length > 0 ? fresh : withinTolerance;
+
+  const selected = candidates[Math.floor(Math.random() * candidates.length)];
 
   return {
     track: selected,

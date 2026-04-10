@@ -12,13 +12,13 @@ BPMove is a capstone project for Samford University CS program under **Dr. Brian
 - **Language:** TypeScript, strict mode
 - **BLE:** react-native-ble-plx
 - **Audio (local):** react-native-track-player
-- **Audio (Spotify):** react-native-spotify-remote
+- **Audio (Spotify):** react-native-spotify-remote (auth only) + Spotify Web API (playback control)
 - **Navigation:** @react-navigation/native + bottom-tabs + native-stack
 - **Environment:** react-native-config (`.env` file, never committed)
 - **Persistence:** @react-native-async-storage/async-storage (session history)
 - **Background:** react-native-background-actions (keeps BLE + audio alive when backgrounded)
 - **Export:** react-native-fs + react-native-share (write CSV/JSON to disk, open share sheet)
-- **BPM Data:** SoundNet Track Analysis API via RapidAPI (`GET track-analysis.p.rapidapi.com/pktx/rapid?song=TITLE&artist=ARTIST`, response field `tempo`)
+- **BPM Data:** SoundNet Track Analysis API via RapidAPI (`GET track-analysis.p.rapidapi.com/pktx/spotify/{spotifyTrackId}`, response field `tempo`)
 - **Testing:** Jest + React Native Testing Library
 - **State:** ServiceRegistry + typed EventBus (no Redux, no Zustand, no Context)
 
@@ -68,14 +68,14 @@ BPMove is a React Native app that reads heart rate from a Bluetooth monitor and 
 
 ### Service Layer
 
-All services are singleton instances registered in `src/core/ServiceRegistry.ts` and initialized in `src/app/App.tsx`. Initialization order matters — `AdaptiveBPMEngine` must be registered before `SessionLogger` so that algorithm state is cached before the logger's `hr:reading` handler runs. Note: `AdaptiveBPMEngine` and `SessionLogger` are started on user action in `SessionHomeScreen.tsx` or `DebugScreen.tsx`, not at app startup.
+All services are singleton instances registered in `src/core/ServiceRegistry.ts` and initialized in `src/app/App.tsx`. Initialization order matters — `AdaptiveBPMEngine` must be registered before `SessionLogger` so that algorithm state is cached before the logger's `hr:reading` handler runs. Note: `AdaptiveBPMEngine` and `SessionLogger` are started on user action in `SessionHomeScreen.tsx` or `DebugScreen.tsx`, not at app startup. `initializeServices()` is guarded against double-invocation (React strict mode) via `ServiceRegistry.has()` check. `TrackProviderManager.initialize()` has its own `initialized` flag to prevent duplicate provider loading. The `useEffect` in `App.tsx` uses a `cancelled` flag so stale async completions from strict-mode remounts are ignored.
 
 | Key | Service | Purpose |
 |-----|---------|---------|
 | `heartrate` | `HeartRateService` | BLE scanning, connection, HR parsing |
 | `algorithm` | `AdaptiveBPMEngine` | HR → BPM target state machine |
 | `musicLibrary` | `MusicLibraryManager` | Track catalog and BPM index |
-| `music` | `MusicPlayerService` | Playback via `react-native-track-player` |
+| `music` | `MusicPlayerService` | Playback control — delegates to active TrackProvider |
 | `trackProvider` | `TrackProviderManager` | Provider selection, fallback, track loading |
 | `logging` | `SessionLogger` | Event recording and metrics |
 
@@ -134,12 +134,19 @@ Source-agnostic track loading and playback via `TrackProvider` interface (`src/m
 
 - **TrackProvider interface** — contract: `isAvailable()`, `loadTracks()`, `playTrack()`, `pause()`, `resume()`, `stop()`, `getPosition()`, `destroy()`. All fallible methods return `Result<T>` (`{ok: true, data} | {ok: false, error}`).
 - **LocalTrackProvider** (`src/modules/music/providers/LocalTrackProvider.ts`) — wraps react-native-track-player. Serves 14 bundled MP3s (123–174 BPM) from `assets/tracks/` via Metro `require()`. Always available. Priority 10.
-- **SpotifyTrackProvider** (`src/modules/music/providers/spotify/SpotifyTrackProvider.ts`) — authenticates via `react-native-spotify-remote`, fetches user's Saved Tracks from Spotify Web API, looks up BPM via SoundNet/RapidAPI (`SoundNetClient.ts`), controls playback via Spotify App Remote. Priority 0 (tried first, local is fallback). Pre-caches all BPM data at `loadTracks()` — no network calls mid-run. Requires `SPOTIFY_CLIENT_ID` and `RAPIDAPI_KEY` in `.env`.
-- **TrackProviderManager** (`src/modules/music/providers/TrackProviderManager.ts`) — tries providers in priority order, first success becomes active. Calls `libraryManager.loadTracks()` and `musicService.setActiveProvider()`. Registered as `'trackProvider'` in ServiceRegistry. Falls back to local if Spotify auth fails or keys aren't configured.
+- **SpotifyTrackProvider** (`src/modules/music/providers/spotify/SpotifyTrackProvider.ts`) — authenticates via `react-native-spotify-remote` (auth only), fetches user's Saved Tracks (up to 20) from Spotify Web API, looks up BPM via SoundNet/RapidAPI (`SoundNetClient.ts`), controls playback via Spotify Web API (`SpotifyWebPlayback.ts`). Priority 0 (tried first, local is fallback). Pre-caches all BPM data at `loadTracks()` — no network calls mid-run. Requires `SPOTIFY_CLIENT_ID` and `RAPIDAPI_KEY` in `.env`. Filters tracks to 100–200 BPM range.
+- **SpotifyWebPlayback** (`src/modules/music/providers/spotify/SpotifyWebPlayback.ts`) — HTTP client wrapping Spotify Web API playback endpoints (`/v1/me/player/*`). Handles device discovery, play, pause, resume, and playback state polling. Replaces the broken Spotify App Remote SDK for all playback control.
+- **SoundNetClient** (`src/modules/music/providers/spotify/SoundNetClient.ts`) — BPM lookup via RapidAPI's SoundNet Track Analysis API. Uses Spotify track ID endpoint (`/pktx/spotify/{id}`). Rate-limited: `BATCH_SIZE=1`, `BATCH_DELAY_MS=1500`. Includes 5s timeout per request, 429 retry with 3s backoff. Results cached via `BPMCache`.
+- **BPMCache** (`src/modules/music/providers/spotify/BPMCache.ts`) — AsyncStorage wrapper for BPM data, keyed by `bpmove:bpm:{trackId}`. Cache-first flow avoids repeated API calls across sessions.
+- **TrackProviderManager** (`src/modules/music/providers/TrackProviderManager.ts`) — tries providers in priority order, first success becomes active. Calls `libraryManager.loadTracks()` and `musicService.setActiveProvider()`. Registered as `'trackProvider'` in ServiceRegistry. Falls back to local if Spotify auth fails or keys aren't configured. Guarded against double-initialization (React strict mode).
 
 Provider events in EventBus: `provider:loading`, `provider:ready`, `provider:error`, `provider:fallback`.
 
-**Track switch debounce:** MusicPlayerService enforces 12-second minimum between track switches (`MIN_TRACK_SWITCH_INTERVAL_MS`), separate from the algorithm's 5-second cooldown. Emits `music:trackSwitchBlocked` when blocked.
+**Track selection:** `TrackSelector.selectTrack()` is a pure function that picks tracks within a 5 BPM tolerance window (`BPM_TOLERANCE`), avoiding recently played tracks (passed as `recentTrackIds`). Falls back to recent tracks only if no fresh candidates exist. Both `skip()` and the algorithm's `selectAndPlay()` share the same recent history (`RECENT_TRACK_HISTORY_SIZE = 5`), preventing the algorithm from overriding user skips.
+
+**Track switch debounce:** MusicPlayerService enforces 12-second minimum between algorithm-driven track switches (`MIN_TRACK_SWITCH_INTERVAL_MS`). User-initiated `skip()` bypasses this cooldown but resets the timer. Emits `music:trackSwitchBlocked` when the algorithm is throttled.
+
+**Track-ended detection:** `SpotifyTrackProvider` polls `getPlaybackState` every 2s. When `progressMs >= durationMs - 1000` and `!isPlaying`, it emits `music:trackEnded`. `MusicPlayerService` listens and auto-advances to the next track, bypassing cooldown.
 
 **TrackMetadata.url** is `string | number` — string for remote URIs (Spotify), number for Metro `require()` asset IDs (local).
 
@@ -162,7 +169,7 @@ Environment variables are managed via `react-native-config` reading from a `.env
 
 Config accessed via `src/config/env.ts`. See `.env.example` for the template.
 
-**URL scheme `bpmove://`** is registered in both iOS (`Info.plist` → `CFBundleURLTypes`) and Android (`AndroidManifest.xml` → intent-filter) for the Spotify OAuth callback.
+**URL scheme `bpmove://`** is registered in both iOS (`Info.plist` → `CFBundleURLTypes`) and Android (`AndroidManifest.xml` → intent-filter) for the Spotify OAuth callback. iOS requires `LSApplicationQueriesSchemes` with `"spotify"` in `Info.plist` for the auth SDK to detect the Spotify app. `AppDelegate.swift` forwards incoming URLs to `RNSpotifyRemoteAuth` via a Swift-ObjC bridging header (`BPMove-Bridging-Header.h`).
 
 ## Code Style
 
@@ -209,15 +216,16 @@ Config accessed via `src/config/env.ts`. See `.env.example` for the template.
 
 - **BPM coverage gap** — Local catalog has no tracks between 140 and 174 BPM. Zone 4 workouts will have limited music selection. Spotify provider fills this gap when configured.
 - **Background playback untested on device** — `react-native-background-actions` is wired, iOS `UIBackgroundModes` has `audio` + `bluetooth-central`, Android manifest has foreground service permissions. Needs physical device verification.
-- **Spotify untested on device** — `SpotifyTrackProvider` is implemented but requires `.env` with real keys, plus Spotify app installed on device for App Remote.
-- **SoundNet API untested with real key** — Endpoint verified against RapidAPI docs. Needs a real RapidAPI key to test end-to-end.
 - **No onboarding flow** — App drops straight into Session tab. No first-run setup or tutorial.
 - **No error boundaries** — React Error Boundaries not yet added around screen components.
+- **No loading/progress screen** — Spotify initialization (auth + BPM lookup for 20 tracks) takes ~30s. Currently shows a static "Initializing..." screen with no progress feedback. Step Cards design selected but not yet implemented (see `docs/superpowers/specs/` for brainstorm artifacts).
 
 ## What NOT to Do
 
 - Don't use Expo. BLE requires bare CLI.
 - Don't use Spotify's Audio Features/Audio Analysis API. Deprecated for new apps.
+- Don't use the Spotify App Remote SDK for playback control. The bundled iOS SDK (v1.2.1) is incompatible with the current Spotify app — `SpotifyRemote.connect()` disconnects with "End of stream." Use Spotify Web API via `SpotifyWebPlayback.ts` instead. Auth via `SpotifyAuth` still works.
+- Don't read the `.env` file or display its contents. API keys must never appear in conversation transcripts.
 - Don't make network calls during an active run. Cache everything pre-run.
 - Don't use class components.
 - Don't use `any`.

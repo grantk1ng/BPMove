@@ -6,6 +6,7 @@ import type {MusicLibraryManager} from './MusicLibraryManager';
 import type {TrackProvider} from './providers/types';
 
 const MIN_TRACK_SWITCH_INTERVAL_MS = 12_000;
+const RECENT_TRACK_HISTORY_SIZE = 5;
 
 export class MusicPlayerService {
   private currentTrack: TrackMetadata | null = null;
@@ -15,6 +16,7 @@ export class MusicPlayerService {
   private activeProvider: TrackProvider | null = null;
   private isPlaying = false;
   private lastTrackSwitchTimestamp = 0;
+  private recentTrackIds: string[] = [];
 
   constructor(libraryManager: MusicLibraryManager) {
     this.libraryManager = libraryManager;
@@ -27,6 +29,7 @@ export class MusicPlayerService {
   start(): void {
     this.unsubscribers.push(
       eventBus.on('algo:target', this.onAlgoTarget),
+      eventBus.on('music:trackEnded', this.onTrackEnded),
     );
   }
 
@@ -57,8 +60,32 @@ export class MusicPlayerService {
   }
 
   async skip(): Promise<void> {
-    if (this.targetBPM !== null) {
-      await this.selectAndPlay(this.targetBPM);
+    if (!this.activeProvider) {
+      return;
+    }
+
+    const library = this.libraryManager.getLibrary();
+    if (library.tracks.length === 0) {
+      return;
+    }
+
+    const targetBPM = this.targetBPM ?? this.currentTrack?.bpm ?? 120;
+    const selection = selectTrack(targetBPM, library, this.recentTrackIds);
+
+    if (!selection) {
+      return;
+    }
+
+    this.pushRecentTrack(selection.track.id);
+    this.currentTrack = selection.track;
+    this.lastTrackSwitchTimestamp = Date.now();
+
+    const result = await this.activeProvider.playTrack(selection.track);
+    if (result.ok) {
+      this.isPlaying = true;
+      eventBus.emit('music:changed', selection.track);
+    } else {
+      eventBus.emit('music:error', {message: result.error});
     }
   }
 
@@ -76,7 +103,15 @@ export class MusicPlayerService {
     await this.selectAndPlay(target.targetBPM);
   };
 
-  private async selectAndPlay(targetBPM: number): Promise<void> {
+  private onTrackEnded = async (): Promise<void> => {
+    this.isPlaying = false;
+    this.emitPlaybackState();
+    if (this.targetBPM !== null) {
+      await this.selectAndPlay(this.targetBPM, true);
+    }
+  };
+
+  private async selectAndPlay(targetBPM: number, bypassCooldown = false): Promise<void> {
     if (!this.activeProvider) {
       return;
     }
@@ -84,7 +119,7 @@ export class MusicPlayerService {
     const now = Date.now();
     const elapsed = now - this.lastTrackSwitchTimestamp;
 
-    if (elapsed < MIN_TRACK_SWITCH_INTERVAL_MS) {
+    if (!bypassCooldown && elapsed < MIN_TRACK_SWITCH_INTERVAL_MS) {
       eventBus.emit('music:trackSwitchBlocked', {
         reason: 'cooldown',
         cooldownRemainingMs: MIN_TRACK_SWITCH_INTERVAL_MS - elapsed,
@@ -96,7 +131,7 @@ export class MusicPlayerService {
     const selection = selectTrack(
       targetBPM,
       library,
-      this.currentTrack?.id ?? null,
+      this.recentTrackIds,
     );
 
     if (!selection) {
@@ -107,6 +142,7 @@ export class MusicPlayerService {
       return;
     }
 
+    this.pushRecentTrack(selection.track.id);
     this.currentTrack = selection.track;
     this.lastTrackSwitchTimestamp = now;
 
@@ -116,6 +152,13 @@ export class MusicPlayerService {
       eventBus.emit('music:changed', selection.track);
     } else {
       eventBus.emit('music:error', {message: result.error});
+    }
+  }
+
+  private pushRecentTrack(trackId: string): void {
+    this.recentTrackIds.push(trackId);
+    if (this.recentTrackIds.length > RECENT_TRACK_HISTORY_SIZE) {
+      this.recentTrackIds.shift();
     }
   }
 

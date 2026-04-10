@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
 import {eventBus} from '../core/EventBus';
 import {ServiceRegistry} from '../core/ServiceRegistry';
@@ -12,6 +12,7 @@ import {NowPlaying} from '../components/NowPlaying';
 import {HR_ZONE_PRESETS} from '../modules/algorithm/presets';
 import type {AlgorithmMode, AlgorithmConfig} from '../modules/algorithm/types';
 import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
+import type {MusicPlayerService} from '../modules/music/MusicPlayerService';
 import {stopBackgroundSession} from '../modules/background';
 import {saveSession} from '../modules/logging/SessionStore';
 import {formatDuration} from '../utils/formatters';
@@ -77,6 +78,8 @@ export function ActiveSessionScreen({
           style: 'destructive',
           onPress: async () => {
             engine.stop();
+            const musicService = ServiceRegistry.get<MusicPlayerService>('music');
+            musicService.stop();
             const log = stopSession('user');
             stopBackgroundSession().catch(() => {});
 
@@ -93,8 +96,17 @@ export function ActiveSessionScreen({
     );
   }, [engine, stopSession, navigation]);
 
+  const wasActive = useRef(false);
+
+  useEffect(() => {
+    if (sessionActive) {
+      wasActive.current = true;
+    } else if (wasActive.current) {
+      navigation.goBack();
+    }
+  }, [sessionActive, navigation]);
+
   if (!sessionActive) {
-    navigation.goBack();
     return null;
   }
 

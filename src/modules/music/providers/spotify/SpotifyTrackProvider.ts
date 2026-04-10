@@ -1,10 +1,10 @@
 import {
   auth as SpotifyAuth,
-  remote as SpotifyRemote,
   ApiScope,
 } from 'react-native-spotify-remote';
 import type SpotifyApiConfig from 'react-native-spotify-remote/dist/ApiConfig';
 import {SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URL} from '../../../../config/env';
+import {eventBus} from '../../../../core/EventBus';
 import type {TrackMetadata} from '../../types';
 import type {
   TrackProvider,
@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import {lookupBPMBatch} from './SoundNetClient';
 import type {TrackIdentifier} from './SoundNetClient';
+import * as WebPlayback from './SpotifyWebPlayback';
 
 const SPOTIFY_CONFIG: SpotifyApiConfig = {
   clientID: SPOTIFY_CLIENT_ID,
@@ -23,6 +24,7 @@ const SPOTIFY_CONFIG: SpotifyApiConfig = {
     ApiScope.UserLibraryReadScope,
     ApiScope.UserReadPlaybackStateScope,
     ApiScope.UserReadCurrentlyPlayingScope,
+    ApiScope.UserModifyPlaybackStateScope,
     ApiScope.PlaylistReadPrivateScope,
   ],
 };
@@ -35,6 +37,8 @@ export class SpotifyTrackProvider implements TrackProvider {
   private status: ProviderStatus = 'idle';
   private accessToken: string | null = null;
   private tracks: TrackMetadata[] = [];
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private currentTrackId: string | null = null;
 
   getStatus(): ProviderStatus {
     return this.status;
@@ -46,9 +50,37 @@ export class SpotifyTrackProvider implements TrackProvider {
     }
 
     try {
+      console.log('[Spotify] Authorizing...');
       const session = await SpotifyAuth.authorize(SPOTIFY_CONFIG);
-      this.accessToken = session.accessToken;
-      await SpotifyRemote.connect(session.accessToken);
+      console.log('[Spotify] Auth result:', JSON.stringify(session));
+
+      // The native module returns NSNull (→ undefined/null in JS) when
+      // the session has no refreshToken, which happens without a token
+      // swap server. Fall back to getSession() to retrieve the token.
+      let token: string | undefined;
+      if (session && typeof session === 'object' && session.accessToken) {
+        token = session.accessToken;
+      } else {
+        console.log('[Spotify] authorize returned no session, trying getSession...');
+        const existing = await SpotifyAuth.getSession();
+        token = existing?.accessToken;
+      }
+
+      if (!token) {
+        return {ok: false, error: 'Spotify auth succeeded but no access token returned'};
+      }
+
+      console.log('[Spotify] Auth success');
+      this.accessToken = token;
+
+      console.log('[Spotify] Checking for active device...');
+      const device = await WebPlayback.ensureActiveDevice(this.accessToken);
+      if (!device.ok) {
+        console.log(`[Spotify] Device check failed: ${device.error}`);
+        return {ok: false, error: device.error};
+      }
+      console.log(`[Spotify] Device ready: ${device.data}`);
+
       return {ok: true, data: true};
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -64,7 +96,10 @@ export class SpotifyTrackProvider implements TrackProvider {
     this.status = 'loading';
 
     try {
+      console.log('[Spotify] Fetching user library...');
       const spotifyTracks = await this.fetchUserLibrary();
+      console.log(`[Spotify] Got ${spotifyTracks.length} tracks from library`);
+      console.log('[Spotify] Looking up BPM data...');
 
       if (spotifyTracks.length === 0) {
         this.status = 'error';
@@ -106,67 +141,65 @@ export class SpotifyTrackProvider implements TrackProvider {
   }
 
   async playTrack(track: TrackMetadata): Promise<Result<void>> {
-    try {
-      const uri = typeof track.url === 'string' ? track.url : '';
-      await SpotifyRemote.playUri(uri);
-      return {ok: true, data: undefined};
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return {ok: false, error: `Spotify playback failed: ${message}`};
+    if (!this.accessToken) {
+      return {ok: false, error: 'Not authenticated'};
     }
+
+    const uri = typeof track.url === 'string' ? track.url : '';
+    const result = await WebPlayback.play(this.accessToken, uri);
+    if (result.ok) {
+      this.currentTrackId = track.id;
+      this.startPolling();
+    }
+    return result;
   }
 
   async pause(): Promise<Result<void>> {
-    try {
-      await SpotifyRemote.pause();
-      return {ok: true, data: undefined};
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return {ok: false, error: `Spotify pause failed: ${message}`};
+    if (!this.accessToken) {
+      return {ok: false, error: 'Not authenticated'};
     }
+    return WebPlayback.pause(this.accessToken);
   }
 
   async resume(): Promise<Result<void>> {
-    try {
-      await SpotifyRemote.resume();
-      return {ok: true, data: undefined};
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return {ok: false, error: `Spotify resume failed: ${message}`};
+    if (!this.accessToken) {
+      return {ok: false, error: 'Not authenticated'};
     }
+    return WebPlayback.resume(this.accessToken);
   }
 
   async stop(): Promise<Result<void>> {
-    try {
-      await SpotifyRemote.pause();
-      return {ok: true, data: undefined};
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return {ok: false, error: `Spotify stop failed: ${message}`};
+    this.stopPolling();
+    if (!this.accessToken) {
+      return {ok: false, error: 'Not authenticated'};
     }
+    return WebPlayback.pause(this.accessToken);
   }
 
   async getPosition(): Promise<
     Result<{positionSeconds: number; durationSeconds: number}>
   > {
-    try {
-      const state = await SpotifyRemote.getPlayerState();
-      return {
-        ok: true,
-        data: {
-          positionSeconds: state.playbackPosition / 1000,
-          durationSeconds: state.track.duration / 1000,
-        },
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return {ok: false, error: `Position query failed: ${message}`};
+    if (!this.accessToken) {
+      return {ok: false, error: 'Not authenticated'};
     }
+
+    const state = await WebPlayback.getPlaybackState(this.accessToken);
+    if (!state.ok) {
+      return {ok: false, error: state.error};
+    }
+
+    return {
+      ok: true,
+      data: {
+        positionSeconds: state.data.progressMs / 1000,
+        durationSeconds: state.data.durationMs / 1000,
+      },
+    };
   }
 
   async destroy(): Promise<void> {
+    this.stopPolling();
     try {
-      await SpotifyRemote.disconnect();
       await SpotifyAuth.endSession();
     } catch {
       // Best effort cleanup
@@ -174,6 +207,37 @@ export class SpotifyTrackProvider implements TrackProvider {
     this.status = 'idle';
     this.accessToken = null;
     this.tracks = [];
+    this.currentTrackId = null;
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    this.pollInterval = setInterval(async () => {
+      if (!this.accessToken) {
+        return;
+      }
+      try {
+        const state = await WebPlayback.getPlaybackState(this.accessToken);
+        if (!state.ok) {
+          return;
+        }
+        const nearEnd =
+          state.data.progressMs >= state.data.durationMs - 1000;
+        if (nearEnd && !state.data.isPlaying && this.currentTrackId) {
+          this.stopPolling();
+          eventBus.emit('music:trackEnded', {trackId: this.currentTrackId});
+        }
+      } catch {
+        // Ignore polling errors — next tick will retry
+      }
+    }, 2000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval !== null) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
   }
 
   private async fetchUserLibrary(): Promise<SpotifyLibraryTrack[]> {
@@ -184,7 +248,7 @@ export class SpotifyTrackProvider implements TrackProvider {
     const allTracks: SpotifyLibraryTrack[] = [];
     let offset = 0;
     const limit = 50;
-    const maxTracks = 500;
+    const maxTracks = 20;
 
     while (offset < maxTracks) {
       const response = await fetch(
