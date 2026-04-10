@@ -1,4 +1,4 @@
-import type {MusicLibrary, TrackMetadata, TrackSelection} from './types';
+import type {MusicLibrary, TrackSelection} from './types';
 
 const BPM_TOLERANCE = 5;
 

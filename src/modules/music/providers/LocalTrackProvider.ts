@@ -47,7 +47,7 @@ export class LocalTrackProvider implements TrackProvider {
       await TrackPlayer.reset();
       await TrackPlayer.add({
         id: track.id,
-        url: track.url,
+        url: track.url as string,
         title: track.title,
         artist: track.artist,
         duration: track.durationSeconds,

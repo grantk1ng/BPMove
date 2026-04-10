@@ -58,7 +58,7 @@ export async function lookupBPM(
 
     if (response.status === 429) {
       // Rate limited — wait and retry once
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise<void>(r => setTimeout(r, 3000));
       clearTimeout(timer);
       const retryController = new AbortController();
       const retryTimer = setTimeout(() => retryController.abort(), 5000);
@@ -142,7 +142,7 @@ export async function lookupBPMBatch(
       } else {
         failCount++;
         if (failCount <= 5) {
-          const reason = result.status === 'fulfilled' ? result.value.error : result.reason;
+          const reason = result.status === 'fulfilled' ? (result.value as {ok: false; error: string}).error : result.reason;
           console.log(`[SoundNet] Lookup failed: ${reason}`);
         }
       }

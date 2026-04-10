@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, ScrollView} from 'react-native';
 import {ServiceRegistry} from '../core/ServiceRegistry';
 import {eventBus} from '../core/EventBus';
 import type {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';

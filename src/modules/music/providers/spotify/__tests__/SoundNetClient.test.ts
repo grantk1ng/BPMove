@@ -7,7 +7,7 @@ jest.mock('../../../../../config/env', () => ({
 }));
 
 const mockFetch = jest.fn();
-(global.fetch as jest.Mock) = mockFetch;
+((globalThis as Record<string, unknown>).fetch as jest.Mock) = mockFetch;
 
 function mockSoundNetResponse(tempo: number) {
   return {

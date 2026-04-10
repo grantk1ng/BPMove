@@ -70,7 +70,7 @@ const mockSpotifyLibraryResponse = {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useFakeTimers();
-  (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
+  ((globalThis as Record<string, unknown>).fetch as jest.Mock) = jest.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve(mockSpotifyLibraryResponse),
   });

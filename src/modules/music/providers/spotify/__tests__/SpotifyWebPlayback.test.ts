@@ -7,7 +7,7 @@ import {
 } from '../SpotifyWebPlayback';
 
 const mockFetch = jest.fn();
-(global.fetch as jest.Mock) = mockFetch;
+((globalThis as Record<string, unknown>).fetch as jest.Mock) = mockFetch;
 
 beforeEach(() => {
   mockFetch.mockReset();

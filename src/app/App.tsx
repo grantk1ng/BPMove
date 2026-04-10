@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {StatusBar, View, Text, StyleSheet} from 'react-native';
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {ServiceRegistry} from '../core/ServiceRegistry';
 import {HeartRateService} from '../modules/heartrate/HeartRateService';
 import {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
