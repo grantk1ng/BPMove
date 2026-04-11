@@ -1,4 +1,5 @@
 export {SessionLogger} from './SessionLogger';
+export {SessionMetricsComputer} from './SessionMetricsComputer';
 export {exportTimeSeriesCSV, exportEventsCSV, exportJSON} from './LogExporter';
 export {
   saveSession,
@@ -15,4 +16,6 @@ export type {
   SessionLog,
   SessionMetadata,
   ExportFormat,
+  DerivedSessionMetrics,
+  SelectionAccuracyEntry,
 } from './types';

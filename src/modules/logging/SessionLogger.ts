@@ -8,6 +8,7 @@ import type {
   SessionLog,
   SessionMetadata,
 } from './types';
+import {SessionMetricsComputer} from './SessionMetricsComputer';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -20,6 +21,7 @@ export class SessionLogger {
   private timeSeries: TimeSeriesRow[] = [];
   private unsubscribers: (() => void)[] = [];
   private active = false;
+  private metricsComputer: SessionMetricsComputer | null = null;
 
   // Cached latest state from other modules for time-series merging
   private cachedAlgoState: AlgorithmState | null = null;
@@ -54,6 +56,7 @@ export class SessionLogger {
     this.cachedTrack = null;
     this.algorithmConfig = config;
     this.active = true;
+    this.metricsComputer = new SessionMetricsComputer();
 
     const zone = config.targetZone as {minBPM: number; maxBPM: number} | undefined;
     this.targetZoneMin = zone?.minBPM ?? 0;
@@ -99,6 +102,13 @@ export class SessionLogger {
     this.unsubscribers = [];
 
     const endTime = Date.now();
+    const derivedMetrics = this.metricsComputer?.computePostSessionMetrics(
+      this.timeSeries,
+      this.targetZoneMin,
+      this.targetZoneMax,
+    );
+    this.metricsComputer = null;
+
     return {
       sessionId: this.sessionId,
       startTime: this.startTime,
@@ -108,7 +118,16 @@ export class SessionLogger {
       deviceName: this.deviceName,
       entries: [...this.entries],
       timeSeries: [...this.timeSeries],
-      metadata: this.computeMetadata(),
+      metadata: {
+        ...this.computeMetadata(),
+        ...(derivedMetrics ?? {
+          modeSwitchCount: 0,
+          avgSelectionAccuracy: null,
+          selectionAccuracyScores: [],
+          hrResponseTimes: [],
+          avgHrResponseMs: null,
+        }),
+      },
     };
   }
 
@@ -163,6 +182,7 @@ export class SessionLogger {
 
   private onAlgoTarget = (target: BPMTarget): void => {
     this.targetChangeCount++;
+    this.metricsComputer?.onTargetChanged(target);
     this.addEntry('algorithm_target', {
       targetBPM: target.targetBPM,
       triggeringHR: target.triggeringHR,
@@ -177,6 +197,7 @@ export class SessionLogger {
     to: AlgorithmMode;
     timestamp: number;
   }): void => {
+    this.metricsComputer?.onModeChanged(event);
     this.addEntry('algorithm_mode_change', {
       from: event.from,
       to: event.to,
@@ -186,11 +207,16 @@ export class SessionLogger {
   private onMusicChanged = (track: TrackMetadata): void => {
     this.cachedTrack = track;
     this.trackCount++;
+    const accuracy = this.metricsComputer?.onMusicChanged(track, Date.now());
     this.addEntry('music_change', {
       trackId: track.id,
       trackTitle: track.title,
       trackBPM: track.bpm,
       trackArtist: track.artist,
+      ...(accuracy && {
+        selectionAccuracy: accuracy.score,
+        bpmDelta: accuracy.bpmDelta,
+      }),
     });
   };
 
@@ -235,7 +261,17 @@ export class SessionLogger {
       currentTrackTitle: this.cachedTrack?.title ?? null,
       currentTrackBPM: this.cachedTrack?.bpm ?? null,
       currentTrackArtist: this.cachedTrack?.artist ?? null,
+      targetReason: null,
+      targetUrgency: null,
+      msSinceLastModeChange: null,
+      msSinceLastMusicChange: null,
+      cumulativeZoneAdherencePct: 0,
     };
+    this.metricsComputer?.enrichRow(row, reading.timestamp, {
+      inZone: this.timeInZoneMs,
+      aboveZone: this.timeAboveZoneMs,
+      belowZone: this.timeBelowZoneMs,
+    });
     this.timeSeries.push(row);
   };
 
@@ -273,6 +309,11 @@ export class SessionLogger {
       timeInZoneMs: this.timeInZoneMs,
       timeAboveZoneMs: this.timeAboveZoneMs,
       timeBelowZoneMs: this.timeBelowZoneMs,
+      modeSwitchCount: 0,
+      avgSelectionAccuracy: null,
+      selectionAccuracyScores: [],
+      hrResponseTimes: [],
+      avgHrResponseMs: null,
     };
   }
 }
