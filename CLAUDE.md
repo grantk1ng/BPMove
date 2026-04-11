@@ -77,7 +77,9 @@ All services are singleton instances registered in `src/core/ServiceRegistry.ts`
 | `musicLibrary` | `MusicLibraryManager` | Track catalog and BPM index |
 | `music` | `MusicPlayerService` | Playback control — delegates to active TrackProvider |
 | `trackProvider` | `TrackProviderManager` | Provider selection, fallback, track loading |
-| `logging` | `SessionLogger` | Event recording and metrics |
+| `logging` | `SessionLogger` | Event recording; delegates derived metrics to `SessionMetricsComputer` |
+
+`SessionMetricsComputer` (`src/modules/logging/SessionMetricsComputer.ts`) is instantiated by `SessionLogger.start()` at session start — not registered in ServiceRegistry. It computes live derived time-series values (target reason/urgency, time-since-last-mode/music-change, cumulative zone adherence %) and post-session aggregates (mode switch count, track selection accuracy with raw BPM deltas, HR response times after RAISE/LOWER transitions).
 
 **Standalone modules** (not in ServiceRegistry — called directly from UI):
 - `SessionStore` (`src/modules/logging/SessionStore.ts`) — AsyncStorage wrapper for saving/loading past sessions. Stores a summary index + full session data keyed by session ID. Caps at 50 sessions with auto-eviction.
@@ -153,8 +155,8 @@ Provider events in EventBus: `provider:loading`, `provider:ready`, `provider:err
 ### Session Persistence & Export
 
 - **Auto-save:** Sessions are automatically saved to AsyncStorage when stopped (from `DebugScreen`, `ActiveSessionScreen`).
-- **History UI:** `HistoryScreen` lists past sessions with metrics (avg HR, max HR, tracks played, % time in zone). Tap a session to export or delete.
-- **Export formats:** CSV time-series, CSV events, JSON — all via `LogExporter.ts`. Files are written to disk with `react-native-fs` and shared via native share sheet (`react-native-share`).
+- **History UI:** `HistoryScreen` lists past sessions with basic metrics (avg/max HR, tracks played, time in zone). `SessionMetricsComputer` computes advanced post-session metrics (mode switches, track selection accuracy, HR response times) stored in `SessionLog.metadata`.
+- **Export formats:** CSV time-series (includes 5 derived metric columns), CSV events (includes per-selection accuracy on `music_change` entries), JSON — all via `LogExporter.ts`. Files are written to disk with `react-native-fs` and shared via native share sheet (`react-native-share`).
 - **Capacity:** 50 sessions max, oldest auto-evicted. Full session data (entries + time-series) stored per session.
 
 ### Environment Configuration
