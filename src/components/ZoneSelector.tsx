@@ -1,5 +1,6 @@
 import React from 'react';
 import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {colors, typography, spacing, radii} from '../theme';
 import type {HRZone} from '../modules/algorithm/types';
 
 interface Props {
@@ -51,41 +52,41 @@ export function ZoneSelector({zones, selectedZone, onSelect, disabled}: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   label: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.sm,
   },
   chips: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   chip: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#2a2a2a',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.bg.card,
     alignItems: 'center',
   },
   chipDisabled: {
     opacity: 0.5,
   },
   chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ccc',
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.text.secondary,
   },
   chipTextSelected: {
-    color: '#fff',
+    color: colors.text.primary,
   },
   chipRange: {
-    fontSize: 11,
-    color: '#999',
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
     marginTop: 2,
   },
 });

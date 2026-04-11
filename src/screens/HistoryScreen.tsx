@@ -23,6 +23,7 @@ import {
 } from '../modules/logging/LogExporter';
 import type {SessionSummary} from '../modules/logging/SessionStore';
 import {formatDuration} from '../utils/formatters';
+import {colors, typography, spacing, radii} from '../theme';
 
 export function HistoryScreen() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -74,17 +75,22 @@ export function HistoryScreen() {
       }
 
       try {
-        const dir = Platform.OS === 'ios'
-          ? RNFS.DocumentDirectoryPath
-          : RNFS.CachesDirectoryPath;
+        const dir =
+          Platform.OS === 'ios'
+            ? RNFS.DocumentDirectoryPath
+            : RNFS.CachesDirectoryPath;
         const filePath = `${dir}/${filename}`;
 
         await RNFS.writeFile(filePath, content, 'utf8');
         await Share.open({url: `file://${filePath}`, type: mimeType, filename});
       } catch (err: unknown) {
-        const dismissed = err instanceof Error && err.message.includes('User did not share');
+        const dismissed =
+          err instanceof Error && err.message.includes('User did not share');
         if (!dismissed) {
-          Alert.alert('Export Failed', err instanceof Error ? err.message : 'Unknown error');
+          Alert.alert(
+            'Export Failed',
+            err instanceof Error ? err.message : 'Unknown error',
+          );
         }
       }
     },
@@ -129,8 +135,14 @@ export function HistoryScreen() {
   const showExportOptions = useCallback(
     (sessionId: string) => {
       Alert.alert('Export Format', 'Choose an export format', [
-        {text: 'CSV (Time Series)', onPress: () => handleExport(sessionId, 'timeseries')},
-        {text: 'CSV (Events)', onPress: () => handleExport(sessionId, 'events')},
+        {
+          text: 'CSV (Time Series)',
+          onPress: () => handleExport(sessionId, 'timeseries'),
+        },
+        {
+          text: 'CSV (Events)',
+          onPress: () => handleExport(sessionId, 'events'),
+        },
         {text: 'JSON', onPress: () => handleExport(sessionId, 'json')},
         {text: 'Cancel', style: 'cancel'},
       ]);
@@ -175,7 +187,10 @@ export function HistoryScreen() {
         {item.durationMs > 0 && (
           <View style={styles.metric}>
             <Text style={styles.metricValue}>
-              {Math.round((item.metadata.timeInZoneMs / item.durationMs) * 100)}%
+              {Math.round(
+                (item.metadata.timeInZoneMs / item.durationMs) * 100,
+              )}
+              %
             </Text>
             <Text style={styles.metricLabel}>in zone</Text>
           </View>
@@ -191,7 +206,7 @@ export function HistoryScreen() {
         <TouchableOpacity
           style={styles.actionButtonDanger}
           onPress={() => handleDelete(item.sessionId)}>
-          <Text style={styles.actionText}>Delete</Text>
+          <Text style={styles.actionTextDanger}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -232,17 +247,19 @@ export function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.bg.primary,
   },
   listContent: {
-    padding: 16,
-    gap: 12,
+    padding: spacing.base,
+    gap: spacing.md,
   },
   sessionCard: {
-    backgroundColor: '#252525',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radii.lg,
+    padding: spacing.base,
+    gap: spacing.md,
   },
   sessionHeader: {
     flexDirection: 'row',
@@ -250,15 +267,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sessionDate: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.semibold,
   },
   sessionDuration: {
-    color: '#aaa',
-    fontSize: 15,
-    fontWeight: '500',
+    color: colors.text.secondary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.medium,
     fontVariant: ['tabular-nums'],
+    fontFamily: typography.family.mono,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -268,66 +286,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metricValue: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    color: colors.text.primary,
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
     fontVariant: ['tabular-nums'],
   },
   metricLabel: {
-    color: '#888',
-    fontSize: 11,
+    color: colors.text.tertiary,
+    fontSize: typography.size.xs,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: typography.letterSpacing.wide,
     marginTop: 2,
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#333',
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: colors.bg.elevated,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
     alignItems: 'center',
   },
   actionButtonDanger: {
-    backgroundColor: '#3a2020',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.action.destructiveBg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radii.md,
     alignItems: 'center',
   },
   actionText: {
-    color: '#ccc',
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.text.secondary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+  },
+  actionTextDanger: {
+    color: colors.action.destructive,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
   },
   empty: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   emptyText: {
-    color: '#888',
-    fontSize: 18,
-    fontWeight: '500',
+    color: colors.text.secondary,
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.medium,
   },
   emptyHint: {
-    color: '#555',
-    fontSize: 14,
+    color: colors.text.tertiary,
+    fontSize: typography.size.base,
   },
   deleteAllButton: {
-    margin: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
+    margin: spacing.base,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
     alignItems: 'center',
-    backgroundColor: '#2a1515',
+    backgroundColor: colors.action.destructiveBg,
   },
   deleteAllText: {
-    color: '#c62828',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.action.destructive,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.medium,
   },
 });

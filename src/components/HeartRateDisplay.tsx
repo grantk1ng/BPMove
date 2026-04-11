@@ -1,5 +1,6 @@
 import React from 'react';
 import {View, Text, StyleSheet} from 'react-native';
+import {colors, typography, spacing} from '../theme';
 import type {AlgorithmMode} from '../modules/algorithm/types';
 
 interface Props {
@@ -23,23 +24,23 @@ export function HeartRateDisplay({bpm, mode, zoneColor}: Props) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: spacing.base,
   },
   bpm: {
     fontSize: 72,
-    fontWeight: '700',
+    fontWeight: typography.weight.bold,
     fontVariant: ['tabular-nums'],
   },
   unit: {
-    fontSize: 16,
-    color: '#888',
+    fontSize: typography.size.base,
+    color: colors.text.secondary,
     marginTop: -8,
   },
   mode: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.semibold,
+    marginTop: spacing.sm,
     textTransform: 'uppercase',
-    letterSpacing: 2,
+    letterSpacing: typography.letterSpacing.wider,
   },
 });

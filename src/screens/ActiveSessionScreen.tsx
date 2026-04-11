@@ -6,10 +6,13 @@ import {useHeartRate} from '../modules/heartrate/useHeartRate';
 import {useHRHistory} from '../modules/heartrate/useHRHistory';
 import {usePlayback} from '../modules/music/usePlayback';
 import {useSessionLog} from '../modules/logging/useSessionLog';
-import {HeartRateDisplay} from '../components/HeartRateDisplay';
+import {usePreferences} from '../modules/preferences/usePreferences';
 import {HeartRateGraph} from '../components/HeartRateGraph';
-import {NowPlaying} from '../components/NowPlaying';
+import {ZoneBar} from '../components/ZoneBar';
+import {ExpandedNowPlaying} from '../components/ExpandedNowPlaying';
 import {HR_ZONE_PRESETS} from '../modules/algorithm/presets';
+import {colors, typography, spacing, radii} from '../theme';
+import {SPOTIFY_CLIENT_ID} from '../config/env';
 import type {AlgorithmMode, AlgorithmConfig} from '../modules/algorithm/types';
 import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
 import type {MusicPlayerService} from '../modules/music/MusicPlayerService';
@@ -18,25 +21,41 @@ import {saveSession} from '../modules/logging/SessionStore';
 import {formatDuration} from '../utils/formatters';
 import type {SessionStackScreenProps} from '../navigation/types';
 
+const MODE_COLORS: Record<AlgorithmMode, string> = {
+  RAISE: colors.mode.raising,
+  LOWER: colors.mode.lowering,
+  MAINTAIN: colors.mode.maintain,
+};
+
+const MODE_LABELS: Record<AlgorithmMode, string> = {
+  RAISE: 'RAISING',
+  LOWER: 'LOWERING',
+  MAINTAIN: 'IN ZONE',
+};
+
 export function ActiveSessionScreen({
   navigation,
 }: SessionStackScreenProps<'ActiveSession'>) {
   const {currentHR} = useHeartRate();
   const {history: hrHistory} = useHRHistory();
   const {currentTrack, isPlaying, targetBPM, play, pause, skip} = usePlayback();
+  const {showGraph} = usePreferences();
   const {
     isActive: sessionActive,
     elapsedMs,
-    entryCount,
-    timeSeriesCount,
     stopSession,
   } = useSessionLog();
 
   const [currentMode, setCurrentMode] = useState<AlgorithmMode>('MAINTAIN');
+  const [inZonePct, setInZonePct] = useState(0);
+  const [avgHR, setAvgHR] = useState(0);
+  const hrReadings = useRef<number[]>([]);
 
   const engine = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
   const config = engine.getConfig() as AlgorithmConfig;
   const zone = config.targetZone ?? HR_ZONE_PRESETS[0];
+  const modeColor = MODE_COLORS[currentMode];
+  const spotifyConnected = !!SPOTIFY_CLIENT_ID;
 
   useEffect(() => {
     const unsub = eventBus.on('algo:modeChanged', event => {
@@ -45,55 +64,42 @@ export function ActiveSessionScreen({
     return unsub;
   }, []);
 
-  const getZoneColor = () => {
-    switch (currentMode) {
-      case 'RAISE':
-        return '#2196F3';
-      case 'LOWER':
-        return '#F44336';
-      case 'MAINTAIN':
-        return zone.color;
+  useEffect(() => {
+    if (currentHR !== null && currentHR > 0) {
+      hrReadings.current.push(currentHR);
+      const sum = hrReadings.current.reduce((a, b) => a + b, 0);
+      setAvgHR(Math.round(sum / hrReadings.current.length));
+      const inZone = hrReadings.current.filter(
+        hr => hr >= zone.minBPM && hr <= zone.maxBPM,
+      ).length;
+      setInZonePct(Math.round((inZone / hrReadings.current.length) * 100));
     }
-  };
-
-  const getModeLabel = () => {
-    switch (currentMode) {
-      case 'RAISE':
-        return 'RAISING BPM';
-      case 'LOWER':
-        return 'LOWERING BPM';
-      case 'MAINTAIN':
-        return 'IN ZONE';
-    }
-  };
+  }, [currentHR, zone.minBPM, zone.maxBPM]);
 
   const handleStopSession = useCallback(async () => {
-    Alert.alert(
-      'End Session',
-      'Are you sure you want to stop this session?',
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {
-          text: 'Stop',
-          style: 'destructive',
-          onPress: async () => {
-            engine.stop();
-            const musicService = ServiceRegistry.get<MusicPlayerService>('music');
-            musicService.stop();
-            const log = stopSession('user');
-            stopBackgroundSession().catch(() => {});
+    Alert.alert('End Session', 'Are you sure you want to stop this session?', [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Stop',
+        style: 'destructive',
+        onPress: async () => {
+          engine.stop();
+          const musicService =
+            ServiceRegistry.get<MusicPlayerService>('music');
+          musicService.stop();
+          const log = stopSession('user');
+          stopBackgroundSession().catch(() => {});
 
-            try {
-              await saveSession(log);
-            } catch {
-              // Best effort
-            }
+          try {
+            await saveSession(log);
+          } catch {
+            // Best effort
+          }
 
-            navigation.goBack();
-          },
+          navigation.goBack();
         },
-      ],
-    );
+      },
+    ]);
   }, [engine, stopSession, navigation]);
 
   const wasActive = useRef(false);
@@ -112,55 +118,75 @@ export function ActiveSessionScreen({
 
   return (
     <View style={styles.container}>
-      {/* Mode indicator bar */}
-      <View style={[styles.modeBar, {backgroundColor: getZoneColor()}]}>
-        <Text style={styles.modeText}>{getModeLabel()}</Text>
+      {/* Mode bar */}
+      <View style={[styles.modeBar, {borderBottomColor: modeColor + '4D'}]}>
+        <View style={styles.modeLeft}>
+          <View
+            style={[
+              styles.modeDot,
+              {backgroundColor: modeColor, shadowColor: modeColor},
+            ]}
+          />
+          <Text style={[styles.modeText, {color: modeColor}]}>
+            {MODE_LABELS[currentMode]}
+          </Text>
+        </View>
         <Text style={styles.timerText}>{formatDuration(elapsedMs)}</Text>
       </View>
 
-      {/* Large HR display */}
-      <HeartRateDisplay
-        bpm={currentHR}
-        mode={currentMode}
-        zoneColor={getZoneColor()}
-      />
+      {/* Heart rate display */}
+      <View style={styles.hrDisplay}>
+        <Text style={styles.hrNumber}>{currentHR ?? '—'}</Text>
+        <Text style={styles.hrLabel}>Heart Rate</Text>
+      </View>
 
-      {/* HR Graph */}
-      <HeartRateGraph
-        data={hrHistory}
+      {/* Zone bar */}
+      <ZoneBar
+        currentHR={currentHR}
         zoneMin={zone.minBPM}
         zoneMax={zone.maxBPM}
-        zoneColor={zone.color}
-        connected={true}
+        zoneName={zone.name}
+        modeColor={modeColor}
       />
 
-      {/* Now Playing */}
-      <NowPlaying
+      {/* Optional graph */}
+      {showGraph && (
+        <HeartRateGraph
+          data={hrHistory}
+          zoneMin={zone.minBPM}
+          zoneMax={zone.maxBPM}
+          zoneColor={zone.color}
+          connected={true}
+        />
+      )}
+
+      {/* Now playing */}
+      <ExpandedNowPlaying
         track={currentTrack}
         isPlaying={isPlaying}
-        targetBPM={targetBPM}
         onPlay={play}
         onPause={pause}
         onSkip={skip}
+        spotifyConnected={spotifyConnected}
       />
 
       {/* Stats row */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{entryCount}</Text>
-          <Text style={styles.statLabel}>events</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{timeSeriesCount}</Text>
-          <Text style={styles.statLabel}>readings</Text>
-        </View>
-        <View style={styles.statItem}>
           <Text style={styles.statValue}>{targetBPM ?? '—'}</Text>
-          <Text style={styles.statLabel}>target BPM</Text>
+          <Text style={styles.statLabel}>Target</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{inZonePct}%</Text>
+          <Text style={styles.statLabel}>In Zone</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{avgHR || '—'}</Text>
+          <Text style={styles.statLabel}>Avg HR</Text>
         </View>
       </View>
 
-      {/* Stop button */}
+      {/* End session */}
       <TouchableOpacity style={styles.stopButton} onPress={handleStopSession}>
         <Text style={styles.stopButtonText}>End Session</Text>
       </TouchableOpacity>
@@ -171,60 +197,100 @@ export function ActiveSessionScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    gap: 12,
+    backgroundColor: colors.bg.primary,
+    padding: spacing.base,
+    gap: spacing.md,
   },
   modeBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    marginBottom: spacing.md,
+  },
+  modeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  modeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
   },
   modeText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    letterSpacing: typography.letterSpacing.wider,
+    fontFamily: typography.family.mono,
+    textTransform: 'uppercase',
   },
   timerText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
+    color: colors.text.secondary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
     fontVariant: ['tabular-nums'],
+    fontFamily: typography.family.mono,
+  },
+  hrDisplay: {
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  hrNumber: {
+    color: colors.text.primary,
+    fontSize: typography.size.hero,
+    fontWeight: typography.weight.bold,
+    lineHeight: 64,
+    letterSpacing: typography.letterSpacing.tight,
+  },
+  hrLabel: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.xs,
+    textTransform: 'uppercase',
+    letterSpacing: typography.letterSpacing.widest,
+    marginTop: 2,
+    fontFamily: typography.family.mono,
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 8,
+    paddingTop: 14,
+    paddingBottom: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
+    marginTop: 2,
   },
   statItem: {
     alignItems: 'center',
   },
   statValue: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
+    color: colors.text.primary,
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
     fontVariant: ['tabular-nums'],
   },
   statLabel: {
-    color: '#888',
-    fontSize: 11,
+    color: colors.text.tertiary,
+    fontSize: typography.size.xs,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: typography.letterSpacing.wide,
+    marginTop: 2,
   },
   stopButton: {
-    backgroundColor: '#c62828',
-    paddingVertical: 16,
-    borderRadius: 12,
+    backgroundColor: colors.action.destructive,
+    paddingVertical: spacing.md,
+    borderRadius: radii.xl,
     alignItems: 'center',
     marginTop: 'auto',
   },
   stopButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
   },
 });

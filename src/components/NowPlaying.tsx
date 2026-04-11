@@ -1,5 +1,6 @@
 import React from 'react';
 import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {colors, typography, spacing, radii} from '../theme';
 import type {TrackMetadata} from '../modules/music/types';
 
 interface Props {
@@ -24,7 +25,9 @@ export function NowPlaying({
       <View style={styles.container}>
         <Text style={styles.empty}>No track playing</Text>
         {targetBPM !== null && (
-          <Text style={styles.target}>Target: {Math.round(targetBPM)} BPM</Text>
+          <Text style={styles.target}>
+            Target: {Math.round(targetBPM)} BPM
+          </Text>
         )}
       </View>
     );
@@ -70,30 +73,30 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2a2a2a',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: colors.bg.card,
+    borderRadius: radii.xl,
+    padding: spacing.md,
   },
   empty: {
-    color: '#666',
-    fontSize: 14,
+    color: colors.text.tertiary,
+    fontSize: typography.size.base,
     flex: 1,
   },
   target: {
-    color: '#888',
-    fontSize: 12,
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
   },
   info: {
     flex: 1,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.semibold,
+    color: colors.text.primary,
   },
   artist: {
-    fontSize: 13,
-    color: '#999',
+    fontSize: typography.size.md,
+    color: colors.text.secondary,
     marginTop: 2,
   },
   badges: {
@@ -102,46 +105,46 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   badge: {
-    backgroundColor: '#444',
-    paddingHorizontal: 8,
+    backgroundColor: colors.bg.elevated,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: radii.sm,
   },
   targetBadge: {
     backgroundColor: '#553300',
   },
   badgeText: {
-    fontSize: 11,
-    color: '#ccc',
-    fontWeight: '500',
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
+    fontWeight: typography.weight.medium,
   },
   controls: {
     flexDirection: 'row',
-    gap: 8,
-    marginLeft: 12,
+    gap: spacing.sm,
+    marginLeft: spacing.md,
   },
   playButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#444',
+    backgroundColor: colors.bg.elevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
   playIcon: {
     fontSize: 18,
-    color: '#fff',
+    color: colors.text.primary,
   },
   skipButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#333',
+    backgroundColor: colors.bg.elevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
   skipIcon: {
     fontSize: 16,
-    color: '#ccc',
+    color: colors.text.secondary,
   },
 });
