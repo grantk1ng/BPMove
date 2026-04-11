@@ -44,6 +44,11 @@ function makeSessionLog(): SessionLog {
         currentTrackTitle: 'Test Song',
         currentTrackBPM: 155,
         currentTrackArtist: 'Test Artist',
+        targetReason: null,
+        targetUrgency: null,
+        msSinceLastModeChange: null,
+        msSinceLastMusicChange: null,
+        cumulativeZoneAdherencePct: 0,
       },
       {
         timestamp: 1700000003000,
@@ -61,6 +66,11 @@ function makeSessionLog(): SessionLog {
         currentTrackTitle: 'Test Song',
         currentTrackBPM: 155,
         currentTrackArtist: 'Test Artist',
+        targetReason: null,
+        targetUrgency: null,
+        msSinceLastModeChange: null,
+        msSinceLastMusicChange: null,
+        cumulativeZoneAdherencePct: 0,
       },
     ],
     metadata: {
@@ -72,6 +82,11 @@ function makeSessionLog(): SessionLog {
       timeInZoneMs: 58000,
       timeAboveZoneMs: 1000,
       timeBelowZoneMs: 1000,
+      modeSwitchCount: 0,
+      avgSelectionAccuracy: null,
+      selectionAccuracyScores: [],
+      hrResponseTimes: [],
+      avgHrResponseMs: null,
     },
   };
 }
@@ -93,6 +108,16 @@ describe('LogExporter', () => {
       const lines = csv.split('\n');
       // 1 header + 2 data rows
       expect(lines).toHaveLength(3);
+    });
+
+    it('includes derived metric columns in headers', () => {
+      const csv = exportTimeSeriesCSV(makeSessionLog());
+      const headers = csv.split('\n')[0];
+      expect(headers).toContain('target_reason');
+      expect(headers).toContain('target_urgency');
+      expect(headers).toContain('ms_since_last_mode_change');
+      expect(headers).toContain('ms_since_last_music_change');
+      expect(headers).toContain('cumulative_zone_adherence_pct');
     });
 
     it('serializes RR intervals as semicolon-separated', () => {

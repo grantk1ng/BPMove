@@ -46,6 +46,19 @@ export interface TimeSeriesRow {
   currentTrackTitle: string | null;
   currentTrackBPM: number | null;
   currentTrackArtist: string | null;
+
+  /** Derived metrics — populated by SessionMetricsComputer.enrichRow */
+  targetReason: string | null;
+  targetUrgency: number | null;
+  msSinceLastModeChange: number | null;
+  msSinceLastMusicChange: number | null;
+  cumulativeZoneAdherencePct: number;
+}
+
+/** Per-track selection accuracy with raw delta preserved for re-scoring */
+export interface SelectionAccuracyEntry {
+  bpmDelta: number;
+  score: number;
 }
 
 /** Session-level summary metadata */
@@ -58,6 +71,28 @@ export interface SessionMetadata {
   timeInZoneMs: number;
   timeAboveZoneMs: number;
   timeBelowZoneMs: number;
+  modeSwitchCount: number;
+  avgSelectionAccuracy: number | null;
+  selectionAccuracyScores: SelectionAccuracyEntry[];
+  hrResponseTimes: Array<{
+    from: AlgorithmMode;
+    to: AlgorithmMode;
+    responseMs: number | null;
+  }>;
+  avgHrResponseMs: number | null;
+}
+
+/** Post-session derived metrics computed by SessionMetricsComputer */
+export interface DerivedSessionMetrics {
+  modeSwitchCount: number;
+  avgSelectionAccuracy: number | null;
+  selectionAccuracyScores: SelectionAccuracyEntry[];
+  hrResponseTimes: Array<{
+    from: AlgorithmMode;
+    to: AlgorithmMode;
+    responseMs: number | null;
+  }>;
+  avgHrResponseMs: number | null;
 }
 
 /** Complete session log for export */

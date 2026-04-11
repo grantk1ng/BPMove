@@ -53,6 +53,8 @@ export type {
   SessionMetadata,
   SessionLog,
   ExportFormat,
+  DerivedSessionMetrics,
+  SelectionAccuracyEntry,
 } from '../modules/logging/types';
 
 // Events

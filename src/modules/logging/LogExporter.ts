@@ -18,6 +18,11 @@ export function exportTimeSeriesCSV(session: SessionLog): string {
     'current_track_title',
     'current_track_bpm',
     'current_track_artist',
+    'target_reason',
+    'target_urgency',
+    'ms_since_last_mode_change',
+    'ms_since_last_music_change',
+    'cumulative_zone_adherence_pct',
   ];
 
   const rows = session.timeSeries.map(row => formatTimeSeriesRow(row));
@@ -41,6 +46,11 @@ function formatTimeSeriesRow(row: TimeSeriesRow): string {
     csvEscape(row.currentTrackTitle ?? ''),
     row.currentTrackBPM ?? '',
     csvEscape(row.currentTrackArtist ?? ''),
+    csvEscape(row.targetReason ?? ''),
+    row.targetUrgency ?? '',
+    row.msSinceLastModeChange ?? '',
+    row.msSinceLastMusicChange ?? '',
+    row.cumulativeZoneAdherencePct.toFixed(1),
   ].join(',');
 }
 
