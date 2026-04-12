@@ -239,7 +239,7 @@ Config accessed via `src/config/env.ts`. See `.env.example` for the template.
 - **BPM coverage gap** — Local catalog has no tracks between 140 and 174 BPM. Zone 4 workouts will have limited music selection. Spotify provider fills this gap when configured.
 - **Background playback untested on device** — `react-native-background-actions` is wired, iOS `UIBackgroundModes` has `audio` + `bluetooth-central`, Android manifest has foreground service permissions. Needs physical device verification.
 - **No error boundaries** — React Error Boundaries not yet added around screen components.
-- **Eager Spotify initialization** — App currently runs Spotify auth + SoundNet BPM lookup at startup in `App.tsx`. Should be deferred to Settings (connect Spotify) with a loading screen. Planned follow-up.
+- **Eager Spotify initialization** — App currently runs Spotify auth + SoundNet BPM lookup at startup in `App.tsx`. Should be deferred to Settings (connect Spotify) with a loading screen. Planned follow-up. Note: `ensureActiveDevice` was moved from `isAvailable()` to `playTrack()` so auth/track-loading succeeds even without an active Spotify device — device transfer happens at play time.
 
 ## What NOT to Do
 
