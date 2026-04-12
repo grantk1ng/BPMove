@@ -4,9 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Alert,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {UserPreferences} from '../../modules/preferences/UserPreferences';
 import {colors, typography, spacing, radii} from '../../theme';
 import type {OnboardingStackScreenProps} from '../../navigation/types';
@@ -16,17 +20,19 @@ export function AgeInputScreen({
 }: OnboardingStackScreenProps<'AgeInput'>) {
   const [ageText, setAgeText] = useState('');
 
+  const age = parseInt(ageText, 10);
+  const hasValidAge = !isNaN(age) && age >= 13 && ageText !== '';
+  const isTooYoung = !isNaN(age) && age < 13 && ageText !== '';
+
   const handleContinue = async () => {
-    const age = parseInt(ageText, 10);
-    if (isNaN(age) || ageText === '') {
-      navigation.navigate('BLEPairing');
-      return;
-    }
-    if (age < 13) {
+    if (isTooYoung) {
       Alert.alert(
         'Age Requirement',
         'BPMove requires users to be at least 13 years old.',
       );
+      return;
+    }
+    if (!hasValidAge) {
       return;
     }
     await UserPreferences.setAge(age);
@@ -38,56 +44,78 @@ export function AgeInputScreen({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.dots}>
-        <View style={styles.dot} />
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-      </View>
+    <SafeAreaView style={styles.safe}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}>
+        <View style={styles.dots}>
+          <View style={styles.dot} />
+          <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
+        </View>
 
-      <View style={styles.content}>
-        <Text style={styles.heading}>Optimize your heart rate zones</Text>
-        <Text style={styles.description}>
-          Enter your age to calculate personalized zone boundaries based on your
-          estimated max heart rate.
-        </Text>
+        <View style={styles.content}>
+          <Text style={styles.heading}>Optimize your heart rate zones</Text>
+          <Text style={styles.description}>
+            Enter your age to calculate personalized zone boundaries based on
+            your estimated max heart rate.
+          </Text>
 
-        <TextInput
-          style={styles.input}
-          value={ageText}
-          onChangeText={setAgeText}
-          keyboardType="number-pad"
-          placeholder="Age"
-          placeholderTextColor={colors.text.muted}
-          maxLength={3}
-          autoFocus
-        />
-      </View>
+          <TextInput
+            style={styles.input}
+            value={ageText}
+            onChangeText={setAgeText}
+            keyboardType="number-pad"
+            placeholder="Age"
+            placeholderTextColor={colors.text.muted}
+            maxLength={2}
+            autoFocus
+          />
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={handleContinue}>
-          <Text style={styles.buttonText}>Continue</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip — I'll set zones manually</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <Text style={styles.ageNote}>You must be at least 13 years old</Text>
+        </View>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.button, !hasValidAge && styles.buttonDisabled]}
+            onPress={handleContinue}
+            disabled={!hasValidAge || isTooYoung}>
+            <Text style={styles.buttonText}>Continue</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSkip}>
+            <Text style={styles.skipText}>
+              Skip — I'll set zones manually
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
+    flex: 1,
+  },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    padding: spacing.xl,
+  },
+  safe: {
     flex: 1,
     backgroundColor: colors.bg.primary,
-    padding: spacing.xl,
-    justifyContent: 'space-between',
   },
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingTop: 60,
+    paddingTop: spacing.base,
   },
   dot: {
     width: 8,
@@ -125,15 +153,24 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.default,
     fontVariant: ['tabular-nums'],
   },
+  ageNote: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.sm,
+    textAlign: 'center',
+  },
   footer: {
     gap: spacing.base,
-    marginBottom: 40,
+    paddingBottom: 40,
   },
   button: {
     backgroundColor: colors.action.primary,
     paddingVertical: spacing.lg,
     borderRadius: radii.xl,
     alignItems: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: colors.bg.elevated,
+    opacity: 0.5,
   },
   buttonText: {
     color: colors.text.primary,

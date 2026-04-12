@@ -1,5 +1,6 @@
 import React from 'react';
 import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors, typography, spacing, radii} from '../../theme';
 import type {OnboardingStackScreenProps} from '../../navigation/types';
 
@@ -7,7 +8,7 @@ export function WelcomeScreen({
   navigation,
 }: OnboardingStackScreenProps<'Welcome'>) {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.dots}>
         <View style={[styles.dot, styles.dotActive]} />
         <View style={styles.dot} />
@@ -24,7 +25,7 @@ export function WelcomeScreen({
         onPress={() => navigation.navigate('AgeInput')}>
         <Text style={styles.buttonText}>Get Started</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -39,7 +40,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingTop: 60,
+    paddingTop: spacing.base,
   },
   dot: {
     width: 8,

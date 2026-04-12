@@ -1,5 +1,6 @@
 import React, {useState, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useHeartRate} from '../modules/heartrate/useHeartRate';
 import {useSessionLog} from '../modules/logging/useSessionLog';
 import {ServiceRegistry} from '../core/ServiceRegistry';
@@ -62,7 +63,7 @@ export function SessionHomeScreen({
   }, [bleConnected, spotifyConfigured, selectedZone, startSession, navigation]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>BPMove</Text>
         <Text style={styles.subtitle}>Select your target zone</Text>
@@ -118,7 +119,7 @@ export function SessionHomeScreen({
         disabled={!bleConnected}>
         <Text style={styles.startButtonText}>Start Session</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 

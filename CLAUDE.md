@@ -84,6 +84,15 @@ All services are singleton instances registered in `src/core/ServiceRegistry.ts`
 **Standalone modules** (not in ServiceRegistry — called directly from UI):
 - `SessionStore` (`src/modules/logging/SessionStore.ts`) — AsyncStorage wrapper for saving/loading past sessions. Stores a summary index + full session data keyed by session ID. Caps at 50 sessions with auto-eviction.
 - `BackgroundSessionService` (`src/modules/background/BackgroundSessionService.ts`) — Wraps `react-native-background-actions` to keep BLE + audio alive when app is backgrounded. Started/stopped alongside sessions. Updates Android notification with HR + track info.
+- `UserPreferences` (`src/modules/preferences/UserPreferences.ts`) — AsyncStorage wrapper for user settings (age, graph toggle, paired device, selected playlist, onboarding complete, custom zones). All keys prefixed `bpmove:`. Hook: `usePreferences()`.
+
+### Design Tokens
+
+All visual constants live in `src/theme/` — `colors.ts`, `typography.ts`, `spacing.ts`, `radii.ts`, exported via barrel `index.ts`. Screens and components import `{colors, typography, spacing, radii} from '../theme'` instead of inline values. Mode colors: raising=#F97316 (orange), maintain=#86B39B (sage green), lowering=#60A5FA (blue).
+
+### Safe Area
+
+All screens with `headerShown: false` wrap content in `SafeAreaView` from `react-native-safe-area-context` with `edges={['top', 'bottom']}` to respect Dynamic Island, notch, and home indicator across all iPhone models. `SafeAreaProvider` wraps the app in `App.tsx`.
 
 All services implement `destroy()` for cleanup. `App.tsx` calls `destroy()` on every registered service in its `useEffect` cleanup.
 
@@ -104,7 +113,7 @@ MusicPlayerService  →  music:changed, music:playbackStateChanged
 
 `AdaptiveBPMEngine` delegates all computation to a `strategy` object implementing `AlgorithmStrategy`. Currently only `LinearStrategy` exists (`src/modules/algorithm/strategies/LinearStrategy.ts`). The strategy pattern is fully wired — adding a new strategy requires implementing `AlgorithmStrategy` and registering it in `src/modules/algorithm/strategies/index.ts`.
 
-The engine runs a state machine with three modes (`MAINTAIN` / `RAISE` / `LOWER`) and applies hysteresis (dwell time + return threshold) to prevent thrashing. Zone presets (Zone 2/3/4) are defined in `src/modules/algorithm/presets.ts`.
+The engine runs a state machine with three modes (`MAINTAIN` / `RAISE` / `LOWER`) and applies hysteresis (dwell time + return threshold) to prevent thrashing. Zone presets (Zone 2/3/4) are defined in `src/modules/algorithm/presets.ts`. `calculateZonesFromAge(age)` computes personalized zones using `maxHR = 220 - age` at 60–70%, 70–80%, 80–90% thresholds.
 
 ### Hooks
 
@@ -113,20 +122,31 @@ React components consume services through custom hooks in each module:
 - `useHRHistory()` — rolling buffer of past readings (for graphs)
 - `usePlayback()` — current track + playback state
 - `useSessionLog()` — log entries for the event log UI
+- `usePreferences()` — user settings (age, graph toggle, paired device, playlist)
 
 Hooks subscribe to the EventBus directly; they do not call services.
 
 ### Navigation & Screens
 
-Tab-based navigation via `@react-navigation/bottom-tabs` + `@react-navigation/native-stack`. Configured in `src/navigation/AppNavigator.tsx`.
+Root navigation uses a conditional stack: first launch shows `OnboardingNavigator` (3-step flow), subsequent launches show `MainTabs`. Onboarding completion is persisted via `UserPreferences.isOnboardingComplete()`. Configured in `src/navigation/AppNavigator.tsx`.
+
+**Onboarding** (first launch only, `src/navigation/OnboardingNavigator.tsx`):
+
+| Step | Screen | Purpose |
+|------|--------|---------|
+| 1 | `WelcomeScreen` | App intro, "Get Started" |
+| 2 | `AgeInputScreen` | Age input for zone calculation, COPPA gate (13+), skip option |
+| 3 | `BLEPairingScreen` | User-initiated BLE scan, device pairing, skip option |
+
+**Main tabs** (`@react-navigation/bottom-tabs`):
 
 | Tab | Screen | Purpose |
 |-----|--------|---------|
-| Session | `SessionHomeScreen` | BLE connect, zone select, start session |
-| Session | `ActiveSessionScreen` | Live HR, graph, now playing, stop session |
+| Session | `SessionHomeScreen` | Zone cards, start session, connection warnings |
+| Session | `ActiveSessionScreen` | Mode bar, HR, zone bar, album art now playing, stats, stop |
 | Session | `DebugScreen` | Full developer console (accessible from Settings) |
 | History | `HistoryScreen` | Past sessions list with metrics, export (CSV/JSON), delete |
-| Settings | `SettingsScreen` | Provider status, Spotify config, debug access |
+| Settings | `SettingsScreen` | HR zones, Spotify, BLE pairing, graph toggle, about, dev |
 
 `ActiveSessionScreen` disables swipe-back gesture to prevent accidental exits during workouts.
 
@@ -218,9 +238,8 @@ Config accessed via `src/config/env.ts`. See `.env.example` for the template.
 
 - **BPM coverage gap** — Local catalog has no tracks between 140 and 174 BPM. Zone 4 workouts will have limited music selection. Spotify provider fills this gap when configured.
 - **Background playback untested on device** — `react-native-background-actions` is wired, iOS `UIBackgroundModes` has `audio` + `bluetooth-central`, Android manifest has foreground service permissions. Needs physical device verification.
-- **No onboarding flow** — App drops straight into Session tab. No first-run setup or tutorial.
 - **No error boundaries** — React Error Boundaries not yet added around screen components.
-- **No loading/progress screen** — Spotify initialization (auth + BPM lookup for 20 tracks) takes ~30s. Currently shows a static "Initializing..." screen with no progress feedback. Step Cards design selected but not yet implemented (see `docs/superpowers/specs/` for brainstorm artifacts).
+- **Eager Spotify initialization** — App currently runs Spotify auth + SoundNet BPM lookup at startup in `App.tsx`. Should be deferred to Settings (connect Spotify) with a loading screen. Planned follow-up.
 
 ## What NOT to Do
 

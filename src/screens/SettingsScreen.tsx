@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
   Switch,
   Alert,
 } from 'react-native';
@@ -37,22 +36,20 @@ export function SettingsScreen({
     pairedDevice,
     setPairedDevice,
     clearPairedDevice,
+    customZones,
+    setCustomZones,
   } = usePreferences();
 
   const [providerName, setProviderName] = useState<string>('none');
   const [trackCount, setTrackCount] = useState(0);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
-  const [advancedZones, setAdvancedZones] = useState(false);
-  const [ageInput, setAgeInput] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const zones = age ? calculateZonesFromAge(age) : HR_ZONE_PRESETS;
-
-  useEffect(() => {
-    if (age) {
-      setAgeInput(String(age));
-    }
-  }, [age]);
+  const baseZones = age ? calculateZonesFromAge(age) : HR_ZONE_PRESETS;
+  const zones = customZones
+    ? customZones.map((z, i) => ({...z, color: baseZones[i]?.color ?? '#888'}))
+    : baseZones;
 
   useEffect(() => {
     try {
@@ -103,14 +100,74 @@ export function SettingsScreen({
     };
   }, []);
 
-  const handleSaveAge = useCallback(async () => {
-    const parsed = parseInt(ageInput, 10);
-    if (isNaN(parsed) || parsed < 13) {
-      Alert.alert('Invalid Age', 'You must be at least 13 years old.');
-      return;
-    }
-    await setAge(parsed);
-  }, [ageInput, setAge]);
+  const handleEditAge = useCallback(() => {
+    Alert.prompt(
+      'Enter Your Age',
+      'Must be at least 13. Used to calculate HR zones.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Save',
+          onPress: async (value?: string) => {
+            const parsed = parseInt(value ?? '', 10);
+            if (isNaN(parsed) || parsed < 13) {
+              Alert.alert('Invalid Age', 'You must be at least 13 years old.');
+              return;
+            }
+            await setAge(parsed);
+          },
+        },
+      ],
+      'plain-text',
+      age ? String(age) : '',
+      'number-pad',
+    );
+  }, [age, setAge]);
+
+  const handleEditZone = useCallback(
+    (index: number, field: 'minBPM' | 'maxBPM') => {
+      const current = zones[index];
+      const fieldLabel = field === 'minBPM' ? 'Min' : 'Max';
+      Alert.prompt(
+        `${current.name} — ${fieldLabel} BPM`,
+        'Enter heart rate value',
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Save',
+            onPress: async (value?: string) => {
+              const parsed = parseInt(value ?? '', 10);
+              if (isNaN(parsed) || parsed < 40 || parsed > 220) {
+                Alert.alert('Invalid', 'Enter a value between 40 and 220.');
+                return;
+              }
+              const updated = zones.map((z, i) => {
+                if (i !== index) {
+                  return {name: z.name, minBPM: z.minBPM, maxBPM: z.maxBPM};
+                }
+                return {
+                  name: z.name,
+                  minBPM: field === 'minBPM' ? parsed : z.minBPM,
+                  maxBPM: field === 'maxBPM' ? parsed : z.maxBPM,
+                };
+              });
+              await setCustomZones(updated);
+            },
+          },
+        ],
+        'plain-text',
+        String(current[field]),
+        'number-pad',
+      );
+    },
+    [zones, setCustomZones],
+  );
+
+  const handleResetZones = useCallback(async () => {
+    await setCustomZones(
+      baseZones.map(z => ({name: z.name, minBPM: z.minBPM, maxBPM: z.maxBPM})),
+    );
+  }, [baseZones, setCustomZones]);
 
   const handleScanBLE = useCallback(() => {
     setScanning(true);
@@ -150,23 +207,12 @@ export function SettingsScreen({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Heart Rate Zones</Text>
 
-        <View style={styles.row}>
+        <TouchableOpacity style={styles.row} onPress={handleEditAge}>
           <Text style={styles.rowLabel}>Age</Text>
-          <View style={styles.ageInputRow}>
-            <TextInput
-              style={styles.ageInput}
-              value={ageInput}
-              onChangeText={setAgeInput}
-              keyboardType="number-pad"
-              placeholder="—"
-              placeholderTextColor={colors.text.muted}
-              maxLength={3}
-              onBlur={handleSaveAge}
-            />
-          </View>
-        </View>
+          <Text style={styles.rowValue}>{age ?? 'Not set'}</Text>
+        </TouchableOpacity>
 
-        {zones.map(zone => (
+        {zones.map((zone, index) => (
           <View key={zone.name} style={styles.row}>
             <View style={styles.zoneNameRow}>
               <View
@@ -174,24 +220,38 @@ export function SettingsScreen({
               />
               <Text style={styles.rowLabel}>{zone.name}</Text>
             </View>
-            <Text style={styles.rowValue}>
-              {zone.minBPM}–{zone.maxBPM} BPM
-            </Text>
+            {advancedOpen ? (
+              <View style={styles.zoneEditRow}>
+                <TouchableOpacity
+                  onPress={() => handleEditZone(index, 'minBPM')}>
+                  <Text style={styles.zoneEditValue}>{zone.minBPM}</Text>
+                </TouchableOpacity>
+                <Text style={styles.zoneDash}>–</Text>
+                <TouchableOpacity
+                  onPress={() => handleEditZone(index, 'maxBPM')}>
+                  <Text style={styles.zoneEditValue}>{zone.maxBPM}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.rowValue}>
+                {zone.minBPM}–{zone.maxBPM} BPM
+              </Text>
+            )}
           </View>
         ))}
 
         <TouchableOpacity
-          onPress={() => setAdvancedZones(!advancedZones)}
+          onPress={() => setAdvancedOpen(!advancedOpen)}
           style={styles.advancedToggle}>
-          <Text style={styles.advancedToggleText}>
-            {advancedZones ? 'Hide Advanced' : 'Advanced'}
+          <Text style={styles.advancedText}>
+            {advancedOpen ? 'Done' : 'Customize Zones'}
           </Text>
         </TouchableOpacity>
 
-        {advancedZones && (
-          <Text style={styles.hint}>
-            Custom zone editing will be available in a future update.
-          </Text>
+        {advancedOpen && customZones && (
+          <TouchableOpacity onPress={handleResetZones}>
+            <Text style={styles.resetText}>Reset to defaults</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -416,32 +476,36 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  ageInputRow: {
+  zoneEditRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
   },
-  ageInput: {
-    color: colors.text.primary,
+  zoneEditValue: {
+    color: colors.action.primary,
     fontSize: typography.size.base,
-    fontWeight: typography.weight.medium,
-    textAlign: 'right',
-    width: 50,
+    fontWeight: typography.weight.semibold,
     fontVariant: ['tabular-nums'],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  zoneDash: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.base,
   },
   advancedToggle: {
     paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  advancedToggleText: {
+  advancedText: {
     color: colors.action.primary,
     fontSize: typography.size.md,
     fontWeight: typography.weight.medium,
   },
-  hint: {
-    color: colors.text.muted,
-    fontSize: typography.size.md,
+  resetText: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.sm,
     textAlign: 'center',
-    paddingHorizontal: spacing.base,
   },
   actionButton: {
     backgroundColor: colors.bg.card,

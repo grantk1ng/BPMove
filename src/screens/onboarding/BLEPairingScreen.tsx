@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, FlatList} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useHeartRate} from '../../modules/heartrate/useHeartRate';
 import {UserPreferences} from '../../modules/preferences/UserPreferences';
 import {requestBlePermissions} from '../../utils/permissions';
@@ -12,23 +13,24 @@ export function BLEPairingScreen({
 }: OnboardingStackScreenProps<'BLEPairing'>) {
   const {devices, startScan, stopScan, connect} = useHeartRate();
   const [scanning, setScanning] = useState(false);
+  const [hasScanned, setHasScanned] = useState(false);
 
-  useEffect(() => {
-    async function beginScan() {
-      await requestBlePermissions();
-      startScan();
-      setScanning(true);
-    }
-    beginScan();
-    const timeout = setTimeout(() => {
+  const handleScan = useCallback(async () => {
+    await requestBlePermissions();
+    startScan();
+    setScanning(true);
+    setHasScanned(true);
+    setTimeout(() => {
       stopScan();
       setScanning(false);
     }, 15000);
+  }, [startScan, stopScan]);
+
+  useEffect(() => {
     return () => {
-      clearTimeout(timeout);
       stopScan();
     };
-  }, [startScan, stopScan]);
+  }, [stopScan]);
 
   const handleConnect = useCallback(
     async (device: BleDeviceInfo) => {
@@ -62,7 +64,7 @@ export function BLEPairingScreen({
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.dots}>
         <View style={styles.dot} />
         <View style={styles.dot} />
@@ -74,9 +76,11 @@ export function BLEPairingScreen({
         <Text style={styles.description}>
           {scanning
             ? 'Scanning for nearby heart rate monitors...'
-            : devices.length === 0
+            : hasScanned && devices.length === 0
               ? 'No devices found. Make sure your monitor is on and nearby.'
-              : `Found ${devices.length} device${devices.length > 1 ? 's' : ''}`}
+              : hasScanned
+                ? `Found ${devices.length} device${devices.length > 1 ? 's' : ''}`
+                : 'Make sure your heart rate monitor is turned on and nearby.'}
         </Text>
 
         {devices.length > 0 && (
@@ -89,18 +93,13 @@ export function BLEPairingScreen({
           />
         )}
 
-        {!scanning && devices.length === 0 && (
+        {!scanning && (
           <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              startScan();
-              setScanning(true);
-              setTimeout(() => {
-                stopScan();
-                setScanning(false);
-              }, 15000);
-            }}>
-            <Text style={styles.retryText}>Try Again</Text>
+            style={styles.scanButton}
+            onPress={handleScan}>
+            <Text style={styles.scanText}>
+              {hasScanned ? 'Scan Again' : 'Scan for Devices'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -108,7 +107,7 @@ export function BLEPairingScreen({
       <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
         <Text style={styles.skipText}>Skip for now</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -123,7 +122,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingTop: 60,
+    paddingTop: spacing.base,
   },
   dot: {
     width: 8,
@@ -183,18 +182,16 @@ const styles = StyleSheet.create({
     fontSize: typography.size.base,
     fontWeight: typography.weight.semibold,
   },
-  retryButton: {
-    backgroundColor: colors.bg.card,
-    borderWidth: 1,
-    borderColor: colors.border.default,
+  scanButton: {
+    backgroundColor: colors.action.primary,
     paddingVertical: 14,
     borderRadius: radii.md,
     alignItems: 'center',
   },
-  retryText: {
+  scanText: {
     color: colors.text.primary,
     fontSize: typography.size.base,
-    fontWeight: typography.weight.medium,
+    fontWeight: typography.weight.semibold,
   },
   skipButton: {
     paddingVertical: spacing.base,

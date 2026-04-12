@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {eventBus} from '../core/EventBus';
 import {ServiceRegistry} from '../core/ServiceRegistry';
 import {useHeartRate} from '../modules/heartrate/useHeartRate';
@@ -117,7 +118,7 @@ export function ActiveSessionScreen({
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Mode bar */}
       <View style={[styles.modeBar, {borderBottomColor: modeColor + '4D'}]}>
         <View style={styles.modeLeft}>
@@ -190,7 +191,7 @@ export function ActiveSessionScreen({
       <TouchableOpacity style={styles.stopButton} onPress={handleStopSession}>
         <Text style={styles.stopButtonText}>End Session</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
