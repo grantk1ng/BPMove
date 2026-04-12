@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
 import {colors, typography, spacing, radii} from '../theme';
 import type {TrackMetadata} from '../modules/music/types';
 
@@ -35,6 +35,13 @@ export function NowPlaying({
 
   return (
     <View style={styles.container}>
+      {track.artworkUrl ? (
+        <Image source={{uri: track.artworkUrl}} style={styles.thumbnail} />
+      ) : (
+        <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+          <Text style={styles.thumbnailIcon}>♪</Text>
+        </View>
+      )}
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>
           {track.title}
@@ -76,6 +83,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.card,
     borderRadius: radii.xl,
     padding: spacing.md,
+    gap: spacing.md,
+  },
+  thumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.sm,
+  },
+  thumbnailPlaceholder: {
+    backgroundColor: colors.bg.elevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbnailIcon: {
+    color: colors.text.tertiary,
+    fontSize: 20,
   },
   empty: {
     color: colors.text.tertiary,

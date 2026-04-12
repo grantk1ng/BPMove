@@ -11,6 +11,7 @@ import {usePreferences} from '../modules/preferences/usePreferences';
 import {HeartRateGraph} from '../components/HeartRateGraph';
 import {ZoneBar} from '../components/ZoneBar';
 import {ExpandedNowPlaying} from '../components/ExpandedNowPlaying';
+import {NowPlaying} from '../components/NowPlaying';
 import {HR_ZONE_PRESETS} from '../modules/algorithm/presets';
 import {colors, typography, spacing, radii} from '../theme';
 import {SPOTIFY_CLIENT_ID} from '../config/env';
@@ -162,14 +163,25 @@ export function ActiveSessionScreen({
       )}
 
       {/* Now playing */}
-      <ExpandedNowPlaying
-        track={currentTrack}
-        isPlaying={isPlaying}
-        onPlay={play}
-        onPause={pause}
-        onSkip={skip}
-        spotifyConnected={spotifyConnected}
-      />
+      {showGraph ? (
+        <NowPlaying
+          track={currentTrack}
+          isPlaying={isPlaying}
+          targetBPM={targetBPM}
+          onPlay={play}
+          onPause={pause}
+          onSkip={skip}
+        />
+      ) : (
+        <ExpandedNowPlaying
+          track={currentTrack}
+          isPlaying={isPlaying}
+          onPlay={play}
+          onPause={pause}
+          onSkip={skip}
+          spotifyConnected={spotifyConnected}
+        />
+      )}
 
       {/* Stats row */}
       <View style={styles.statsRow}>
