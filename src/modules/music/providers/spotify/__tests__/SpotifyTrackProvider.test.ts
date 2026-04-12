@@ -93,12 +93,12 @@ describe('SpotifyTrackProvider', () => {
       Object.defineProperty(envModule, 'SPOTIFY_CLIENT_ID', {value: original, writable: true});
     });
 
-    it('returns true when auth and device check succeed', async () => {
+    it('returns true when auth succeeds', async () => {
       const provider = new SpotifyTrackProvider();
       const result = await provider.isAvailable();
       expect(result).toEqual({ok: true, data: true});
       expect(SpotifyAuth.authorize).toHaveBeenCalled();
-      expect(WebPlayback.ensureActiveDevice).toHaveBeenCalledWith('mock-token');
+      expect(WebPlayback.ensureActiveDevice).not.toHaveBeenCalled();
     });
 
     it('returns error when auth throws', async () => {
@@ -113,17 +113,11 @@ describe('SpotifyTrackProvider', () => {
       });
     });
 
-    it('returns error when no device available', async () => {
-      (WebPlayback.ensureActiveDevice as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        error: 'No Spotify devices found. Open Spotify on your phone.',
-      });
+    it('succeeds even when no device available (device check deferred to playTrack)', async () => {
       const provider = new SpotifyTrackProvider();
       const result = await provider.isAvailable();
-      expect(result).toEqual({
-        ok: false,
-        error: 'No Spotify devices found. Open Spotify on your phone.',
-      });
+      expect(result).toEqual({ok: true, data: true});
+      expect(WebPlayback.ensureActiveDevice).not.toHaveBeenCalled();
     });
   });
 
@@ -152,7 +146,7 @@ describe('SpotifyTrackProvider', () => {
   });
 
   describe('playTrack', () => {
-    it('calls WebPlayback.play with track URI', async () => {
+    it('ensures active device then calls WebPlayback.play', async () => {
       const provider = new SpotifyTrackProvider();
       await provider.isAvailable();
       const track = {
@@ -168,7 +162,34 @@ describe('SpotifyTrackProvider', () => {
       };
       const result = await provider.playTrack(track);
       expect(result).toEqual({ok: true, data: undefined});
+      expect(WebPlayback.ensureActiveDevice).toHaveBeenCalledWith('mock-token');
       expect(WebPlayback.play).toHaveBeenCalledWith('mock-token', 'spotify:track:track1');
+    });
+
+    it('returns error when no active device at play time', async () => {
+      (WebPlayback.ensureActiveDevice as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        error: 'No Spotify devices found. Open Spotify on your phone.',
+      });
+      const provider = new SpotifyTrackProvider();
+      await provider.isAvailable();
+      const track = {
+        id: 'spotify:track1',
+        title: 'Running Song',
+        artist: 'Artist A',
+        album: 'Album A',
+        durationSeconds: 210,
+        bpm: 130,
+        url: 'spotify:track:track1',
+        artworkUrl: null,
+        genre: null,
+      };
+      const result = await provider.playTrack(track);
+      expect(result).toEqual({
+        ok: false,
+        error: 'No Spotify devices found. Open Spotify on your phone.',
+      });
+      expect(WebPlayback.play).not.toHaveBeenCalled();
     });
   });
 
