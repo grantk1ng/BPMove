@@ -7,8 +7,15 @@ import {ActiveSessionScreen} from '../screens/ActiveSessionScreen';
 import {HistoryScreen} from '../screens/HistoryScreen';
 import {SettingsScreen} from '../screens/SettingsScreen';
 import {DebugScreen} from '../screens/DebugScreen';
-import type {TabParamList, SessionStackParamList} from './types';
+import {OnboardingNavigator} from './OnboardingNavigator';
+import {colors} from '../theme';
+import type {
+  RootStackParamList,
+  TabParamList,
+  SessionStackParamList,
+} from './types';
 
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 const SessionStack = createNativeStackNavigator<SessionStackParamList>();
 
@@ -16,10 +23,10 @@ function SessionNavigator() {
   return (
     <SessionStack.Navigator
       screenOptions={{
-        headerStyle: {backgroundColor: '#1a1a1a'},
-        headerTintColor: '#fff',
+        headerStyle: {backgroundColor: colors.bg.primary},
+        headerTintColor: colors.text.primary,
         headerTitleStyle: {fontWeight: '600'},
-        contentStyle: {backgroundColor: '#1a1a1a'},
+        contentStyle: {backgroundColor: colors.bg.primary},
       }}>
       <SessionStack.Screen
         name="SessionHome"
@@ -43,47 +50,66 @@ function SessionNavigator() {
   );
 }
 
-export function AppNavigator() {
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarStyle: {
+          backgroundColor: colors.bg.primary,
+          borderTopColor: colors.border.default,
+        },
+        tabBarActiveTintColor: colors.action.primary,
+        tabBarInactiveTintColor: colors.text.tertiary,
+        headerStyle: {backgroundColor: colors.bg.primary},
+        headerTintColor: colors.text.primary,
+        headerTitleStyle: {fontWeight: '600'},
+      }}>
+      <Tab.Screen
+        name="SessionTab"
+        component={SessionNavigator}
+        options={{
+          title: 'Session',
+          headerShown: false,
+          tabBarLabel: 'Session',
+        }}
+      />
+      <Tab.Screen
+        name="HistoryTab"
+        component={HistoryScreen}
+        options={{
+          title: 'History',
+          tabBarLabel: 'History',
+        }}
+      />
+      <Tab.Screen
+        name="SettingsTab"
+        component={SettingsScreen}
+        options={{
+          title: 'Settings',
+          tabBarLabel: 'Settings',
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+interface AppNavigatorProps {
+  onboardingComplete: boolean;
+}
+
+export function AppNavigator({onboardingComplete}: AppNavigatorProps) {
   return (
     <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          tabBarStyle: {
-            backgroundColor: '#1a1a1a',
-            borderTopColor: '#333',
-          },
-          tabBarActiveTintColor: '#1976D2',
-          tabBarInactiveTintColor: '#888',
-          headerStyle: {backgroundColor: '#1a1a1a'},
-          headerTintColor: '#fff',
-          headerTitleStyle: {fontWeight: '600'},
-        }}>
-        <Tab.Screen
-          name="SessionTab"
-          component={SessionNavigator}
-          options={{
-            title: 'Session',
-            headerShown: false,
-            tabBarLabel: 'Session',
-          }}
-        />
-        <Tab.Screen
-          name="HistoryTab"
-          component={HistoryScreen}
-          options={{
-            title: 'History',
-            tabBarLabel: 'History',
-          }}
-        />
-        <Tab.Screen
-          name="SettingsTab"
-          component={SettingsScreen}
-          options={{
-            title: 'Settings',
-            tabBarLabel: 'Settings',
-          }}
-        />
-      </Tab.Navigator>
+      <RootStack.Navigator screenOptions={{headerShown: false}}>
+        {onboardingComplete ? (
+          <RootStack.Screen name="Main" component={MainTabs} />
+        ) : (
+          <RootStack.Screen
+            name="Onboarding"
+            component={OnboardingNavigator}
+          />
+        )}
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }

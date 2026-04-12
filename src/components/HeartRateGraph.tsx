@@ -1,20 +1,16 @@
 import React, {useMemo} from 'react';
 import {View, Text, StyleSheet} from 'react-native';
 import Svg, {Polyline, Line, Rect, Text as SvgText} from 'react-native-svg';
+import {colors, typography, spacing, radii} from '../theme';
 import type {HRDataPoint} from '../modules/heartrate/useHRHistory';
 
 interface Props {
   data: HRDataPoint[];
-  /** Zone min BPM — draws a horizontal band */
   zoneMin: number;
-  /** Zone max BPM — draws a horizontal band */
   zoneMax: number;
   zoneColor: string;
-  /** Whether the BLE connection is active */
   connected?: boolean;
-  /** Graph width (default: fills container via onLayout) */
   width?: number;
-  /** Graph height */
   height?: number;
 }
 
@@ -24,7 +20,6 @@ const PADDING_LEFT = 32;
 const PADDING_RIGHT = 8;
 const DEFAULT_HEIGHT = 160;
 
-// Fixed Y-axis range for heart rate
 const Y_MIN = 40;
 const Y_MAX = 200;
 
@@ -41,10 +36,13 @@ export function HeartRateGraph({
   const chartWidth = layoutWidth - PADDING_LEFT - PADDING_RIGHT;
   const chartHeight = height - PADDING_TOP - PADDING_BOTTOM;
 
-  const toY = React.useCallback((bpm: number) => {
-    const ratio = (bpm - Y_MIN) / (Y_MAX - Y_MIN);
-    return PADDING_TOP + chartHeight * (1 - ratio);
-  }, [chartHeight]);
+  const toY = React.useCallback(
+    (bpm: number) => {
+      const ratio = (bpm - Y_MIN) / (Y_MAX - Y_MIN);
+      return PADDING_TOP + chartHeight * (1 - ratio);
+    },
+    [chartHeight],
+  );
 
   const points = useMemo(() => {
     if (data.length === 0) {
@@ -52,23 +50,20 @@ export function HeartRateGraph({
     }
 
     const now = Date.now();
-    const windowMs = 60_000; // 60-second window
+    const windowMs = 60_000;
 
     return data
       .map(p => {
         const age = now - p.timestamp;
-        const x =
-          PADDING_LEFT + chartWidth * (1 - age / windowMs);
+        const x = PADDING_LEFT + chartWidth * (1 - age / windowMs);
         const y = toY(Math.max(Y_MIN, Math.min(Y_MAX, p.bpm)));
         return `${x},${y}`;
       })
       .join(' ');
   }, [data, chartWidth, toY]);
 
-  // Y-axis tick marks
   const yTicks = [60, 80, 100, 120, 140, 160, 180];
 
-  // Zone band Y coordinates
   const zoneBandTop = toY(Math.min(zoneMax, Y_MAX));
   const zoneBandBottom = toY(Math.max(zoneMin, Y_MIN));
   const zoneBandHeight = zoneBandBottom - zoneBandTop;
@@ -80,7 +75,6 @@ export function HeartRateGraph({
         style={[styles.graphContainer, {height}]}
         onLayout={e => setLayoutWidth(e.nativeEvent.layout.width)}>
         <Svg width={layoutWidth} height={height}>
-          {/* Zone band */}
           <Rect
             x={PADDING_LEFT}
             y={zoneBandTop}
@@ -90,7 +84,6 @@ export function HeartRateGraph({
             opacity={0.15}
           />
 
-          {/* Horizontal grid lines + labels */}
           {yTicks.map(tick => {
             const y = toY(tick);
             if (y < PADDING_TOP || y > height - PADDING_BOTTOM) {
@@ -103,13 +96,13 @@ export function HeartRateGraph({
                   y1={y}
                   x2={PADDING_LEFT + chartWidth}
                   y2={y}
-                  stroke="#333"
+                  stroke={colors.bg.elevated}
                   strokeWidth={0.5}
                 />
                 <SvgText
                   x={PADDING_LEFT - 4}
                   y={y + 4}
-                  fill="#666"
+                  fill={colors.text.tertiary}
                   fontSize={10}
                   textAnchor="end">
                   {tick}
@@ -118,7 +111,6 @@ export function HeartRateGraph({
             );
           })}
 
-          {/* Zone boundary lines */}
           <Line
             x1={PADDING_LEFT}
             y1={toY(zoneMin)}
@@ -140,44 +132,42 @@ export function HeartRateGraph({
             opacity={0.6}
           />
 
-          {/* HR data line */}
           {data.length >= 2 && (
             <Polyline
               points={points}
               fill="none"
-              stroke="#fff"
+              stroke={colors.text.primary}
               strokeWidth={2}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
           )}
 
-          {/* Current value dot */}
-          {data.length > 0 && (() => {
-            const last = data[data.length - 1];
-            const now = Date.now();
-            const age = now - last.timestamp;
-            const x = PADDING_LEFT + chartWidth * (1 - age / 60_000);
-            const y = toY(Math.max(Y_MIN, Math.min(Y_MAX, last.bpm)));
-            return (
-              <React.Fragment>
-                <Rect
-                  x={x - 3}
-                  y={y - 3}
-                  width={6}
-                  height={6}
-                  rx={3}
-                  fill="#fff"
-                />
-              </React.Fragment>
-            );
-          })()}
+          {data.length > 0 &&
+            (() => {
+              const last = data[data.length - 1];
+              const now = Date.now();
+              const age = now - last.timestamp;
+              const x = PADDING_LEFT + chartWidth * (1 - age / 60_000);
+              const y = toY(Math.max(Y_MIN, Math.min(Y_MAX, last.bpm)));
+              return (
+                <React.Fragment>
+                  <Rect
+                    x={x - 3}
+                    y={y - 3}
+                    width={6}
+                    height={6}
+                    rx={3}
+                    fill={colors.text.primary}
+                  />
+                </React.Fragment>
+              );
+            })()}
 
-          {/* Time labels */}
           <SvgText
             x={PADDING_LEFT}
             y={height - 4}
-            fill="#666"
+            fill={colors.text.tertiary}
             fontSize={10}
             textAnchor="start">
             -60s
@@ -185,7 +175,7 @@ export function HeartRateGraph({
           <SvgText
             x={PADDING_LEFT + chartWidth / 2}
             y={height - 4}
-            fill="#666"
+            fill={colors.text.tertiary}
             fontSize={10}
             textAnchor="middle">
             -30s
@@ -193,21 +183,18 @@ export function HeartRateGraph({
           <SvgText
             x={PADDING_LEFT + chartWidth}
             y={height - 4}
-            fill="#666"
+            fill={colors.text.tertiary}
             fontSize={10}
             textAnchor="end">
             now
           </SvgText>
         </Svg>
 
-        {/* Empty / disconnected state */}
         {(data.length === 0 || !connected) && (
           <View style={styles.emptyOverlay}>
             <Text style={styles.emptyDashes}>{!connected ? '--' : ''}</Text>
             <Text style={styles.emptyText}>
-              {!connected
-                ? 'No heart rate detected'
-                : 'Waiting for HR data…'}
+              {!connected ? 'No heart rate detected' : 'Waiting for HR data…'}
             </Text>
           </View>
         )}
@@ -218,17 +205,17 @@ export function HeartRateGraph({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 4,
+    gap: spacing.xs,
   },
   title: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: typography.letterSpacing.wide,
   },
   graphContainer: {
-    backgroundColor: '#222',
-    borderRadius: 8,
+    backgroundColor: colors.bg.secondary,
+    borderRadius: radii.md,
     overflow: 'hidden',
   },
   emptyOverlay: {
@@ -237,13 +224,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyDashes: {
-    color: '#555',
+    color: colors.text.tertiary,
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: typography.weight.bold,
     fontVariant: ['tabular-nums'],
   },
   emptyText: {
-    color: '#555',
-    fontSize: 14,
+    color: colors.text.tertiary,
+    fontSize: typography.size.base,
   },
 });

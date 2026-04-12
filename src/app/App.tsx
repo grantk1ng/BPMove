@@ -11,7 +11,9 @@ import {SessionLogger} from '../modules/logging/SessionLogger';
 import {LocalTrackProvider} from '../modules/music/providers/LocalTrackProvider';
 import {SpotifyTrackProvider} from '../modules/music/providers/spotify/SpotifyTrackProvider';
 import {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
+import {UserPreferences} from '../modules/preferences/UserPreferences';
 import {AppNavigator} from '../navigation/AppNavigator';
+import {colors} from '../theme';
 
 function initializeServices(): void {
   if (ServiceRegistry.has('heartrate')) {
@@ -46,6 +48,7 @@ function initializeServices(): void {
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,13 +59,16 @@ export default function App() {
       ServiceRegistry.get<TrackProviderManager>('trackProvider');
     const musicService = ServiceRegistry.get<MusicPlayerService>('music');
 
-    providerManager
-      .initialize()
-      .then(() => {
+    Promise.all([
+      providerManager.initialize(),
+      UserPreferences.isOnboardingComplete(),
+    ])
+      .then(([, complete]) => {
         if (cancelled) {
           return;
         }
         musicService.start();
+        setOnboardingComplete(complete);
         setReady(true);
       })
       .catch(() => {
@@ -88,25 +94,24 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-      <AppNavigator />
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={colors.bg.primary}
+      />
+      <AppNavigator onboardingComplete={onboardingComplete} />
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a1a',
-  },
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.bg.primary,
   },
   loadingText: {
-    color: '#888',
+    color: colors.text.secondary,
     fontSize: 16,
   },
 });

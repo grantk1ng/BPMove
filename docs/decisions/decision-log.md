@@ -44,7 +44,7 @@ Format: **Before** → **Problem** → **After** → **Why** → **Tradeoff**
 
 **Why:** The registration order is now a single, readable list in `App.tsx`:
 1. `HeartRateService` → 2. `AdaptiveBPMEngine` → 3. `MusicLibraryManager` → 4. `MusicPlayerService` → 5. `TrackProviderManager` → 6. `SessionLogger`.
-The EventBus's `EventMap` interface enforces correct event payloads at compile time. Services are decoupled — adding a new consumer of `hr:reading` doesn't require modifying `HeartRateService`.
+The EventBus's `EventMap` interface enforces correct event payloads at compile time. Services are decoupled — adding a new consumer of `hr:reading` doesn't require modifying `HeartRateService`. Note: `SessionMetricsComputer` is instantiated at session start time (not app initialization) as a private member of `SessionLogger`, so it is not part of the service registration order.
 
 **Tradeoff:** Indirection. You can't cmd-click from `eventBus.emit('hr:reading', ...)` to its subscribers — you have to grep for `'hr:reading'`. The `ServiceRegistry` uses string keys, so `get<HeartRateService>('heartrate')` loses type safety at the registration boundary (the key-to-type mapping is by convention, not enforced). Slightly more ceremony to add a new service (register in `App.tsx`, add to cleanup).
 

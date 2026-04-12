@@ -21,3 +21,27 @@ export function createDefaultConfig(
     returnToMaintainMs: 3000,
   };
 }
+
+export function calculateZonesFromAge(age: number): typeof HR_ZONE_PRESETS {
+  const maxHR = 220 - age;
+  return [
+    {
+      name: 'Zone 2 (Easy)',
+      minBPM: Math.round(maxHR * 0.6),
+      maxBPM: Math.round(maxHR * 0.7),
+      color: '#4CAF50',
+    },
+    {
+      name: 'Zone 3 (Tempo)',
+      minBPM: Math.round(maxHR * 0.7),
+      maxBPM: Math.round(maxHR * 0.8),
+      color: '#FF9800',
+    },
+    {
+      name: 'Zone 4 (Threshold)',
+      minBPM: Math.round(maxHR * 0.8),
+      maxBPM: Math.round(maxHR * 0.9),
+      color: '#F44336',
+    },
+  ];
+}

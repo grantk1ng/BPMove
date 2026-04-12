@@ -1,212 +1,205 @@
 import React, {useState, useCallback} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useHeartRate} from '../modules/heartrate/useHeartRate';
-import {HR_ZONE_PRESETS, createDefaultConfig} from '../modules/algorithm/presets';
-import type {HRZone} from '../modules/algorithm/types';
-import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
-import {ServiceRegistry} from '../core/ServiceRegistry';
 import {useSessionLog} from '../modules/logging/useSessionLog';
-import {HeartRateDisplay} from '../components/HeartRateDisplay';
-import {ZoneSelector} from '../components/ZoneSelector';
+import {ServiceRegistry} from '../core/ServiceRegistry';
+import {HR_ZONE_PRESETS, createDefaultConfig} from '../modules/algorithm/presets';
+import {colors, typography, spacing, radii} from '../theme';
+import {SPOTIFY_CLIENT_ID} from '../config/env';
 import {requestBlePermissions} from '../utils/permissions';
 import {startBackgroundSession} from '../modules/background';
+import type {HRZone} from '../modules/algorithm/types';
+import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
 import type {SessionStackScreenProps} from '../navigation/types';
 
 export function SessionHomeScreen({
   navigation,
 }: SessionStackScreenProps<'SessionHome'>) {
-  const {
-    currentHR,
-    connectionState,
-    devices,
-    startScan,
-    stopScan,
-    connect,
-    disconnect,
-  } = useHeartRate();
-
+  const {connectionState} = useHeartRate();
   const {startSession} = useSessionLog();
   const [selectedZone, setSelectedZone] = useState<HRZone>(HR_ZONE_PRESETS[0]);
 
-  const handleStartSession = useCallback(async () => {
-    const permResult = await requestBlePermissions();
-    if (permResult !== 'granted') {
+  const bleConnected = connectionState === 'connected';
+  const spotifyConfigured = !!SPOTIFY_CLIENT_ID;
+
+  const handleStart = useCallback(async () => {
+    if (!bleConnected) {
       Alert.alert(
-        'Permissions Required',
-        'BLE permissions are needed to connect to your heart rate monitor.',
+        'No Heart Rate Monitor',
+        'Connect a heart rate monitor in Settings to start a session.',
+        [{text: 'OK'}],
       );
       return;
     }
 
-    const config = createDefaultConfig(selectedZone);
-    const engine = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
-    engine.updateConfig(config);
-    engine.start();
+    const startRun = async () => {
+      try {
+        await requestBlePermissions();
+        const config = createDefaultConfig(selectedZone);
+        const engine = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
+        engine.updateConfig(config);
+        engine.start();
+        startSession(config as unknown as Record<string, unknown>);
+        startBackgroundSession().catch(() => {});
+        navigation.navigate('ActiveSession');
+      } catch {
+        Alert.alert('Error', 'Failed to start session. Please try again.');
+      }
+    };
 
-    startSession(config as unknown as Record<string, unknown>);
-    startBackgroundSession().catch(() => {});
-
-    navigation.navigate('ActiveSession');
-  }, [selectedZone, startSession, navigation]);
+    if (!spotifyConfigured) {
+      Alert.alert(
+        'No Music',
+        "Spotify isn't connected. You'll get heart rate coaching but no music. Continue anyway?",
+        [
+          {text: 'Go to Settings', onPress: () => {}},
+          {text: 'Continue', onPress: startRun},
+        ],
+      );
+    } else {
+      await startRun();
+    }
+  }, [bleConnected, spotifyConfigured, selectedZone, startSession, navigation]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>BPMove</Text>
-        <Text style={styles.subtitle}>Adaptive Music for Your Workout</Text>
+        <Text style={styles.subtitle}>Select your target zone</Text>
       </View>
 
-      <HeartRateDisplay
-        bpm={currentHR}
-        mode="MAINTAIN"
-        zoneColor={selectedZone.color}
-      />
-
-      {/* BLE Connection */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>
-          Heart Rate Monitor: {connectionState}
-        </Text>
-        {connectionState === 'disconnected' && (
-          <TouchableOpacity style={styles.button} onPress={startScan}>
-            <Text style={styles.buttonText}>Scan for Devices</Text>
-          </TouchableOpacity>
-        )}
-        {connectionState === 'scanning' && (
-          <>
-            <TouchableOpacity style={styles.buttonDanger} onPress={stopScan}>
-              <Text style={styles.buttonText}>Stop Scanning</Text>
+      <View style={styles.zoneRow}>
+        {HR_ZONE_PRESETS.map(zone => {
+          const isSelected = zone.name === selectedZone.name;
+          return (
+            <TouchableOpacity
+              key={zone.name}
+              style={[
+                styles.zoneCard,
+                isSelected && {borderColor: zone.color},
+              ]}
+              onPress={() => setSelectedZone(zone)}
+              activeOpacity={0.7}>
+              <Text
+                style={[
+                  styles.zoneNumber,
+                  isSelected && {color: zone.color},
+                ]}>
+                {zone.name.split(' ')[0]} {zone.name.split(' ')[1]}
+              </Text>
+              <Text style={styles.zoneLabel}>
+                {zone.name.includes('Easy')
+                  ? 'Easy'
+                  : zone.name.includes('Tempo')
+                    ? 'Tempo'
+                    : 'Threshold'}
+              </Text>
+              <Text style={styles.zoneRange}>
+                {zone.minBPM}–{zone.maxBPM}
+              </Text>
             </TouchableOpacity>
-            {devices.map(device => (
-              <TouchableOpacity
-                key={device.id}
-                style={styles.deviceRow}
-                onPress={() => connect(device.id)}>
-                <Text style={styles.deviceName}>
-                  {device.name ?? 'Unknown'}
-                </Text>
-                <Text style={styles.deviceRssi}>{device.rssi} dBm</Text>
-              </TouchableOpacity>
-            ))}
-          </>
-        )}
-        {connectionState === 'connected' && (
-          <TouchableOpacity style={styles.buttonDanger} onPress={disconnect}>
-            <Text style={styles.buttonText}>Disconnect</Text>
-          </TouchableOpacity>
-        )}
+          );
+        })}
       </View>
 
-      <ZoneSelector
-        zones={HR_ZONE_PRESETS}
-        selectedZone={selectedZone}
-        onSelect={setSelectedZone}
-        disabled={false}
-      />
+      {!bleConnected && (
+        <View style={styles.warning}>
+          <Text style={styles.warningText}>
+            No heart rate monitor connected
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.spacer} />
 
       <TouchableOpacity
-        style={[
-          styles.startButton,
-          connectionState !== 'connected' && styles.startButtonDisabled,
-        ]}
-        onPress={handleStartSession}
-        disabled={connectionState !== 'connected'}>
+        style={[styles.startButton, !bleConnected && styles.startButtonDisabled]}
+        onPress={handleStart}
+        disabled={!bleConnected}>
         <Text style={styles.startButtonText}>Start Session</Text>
       </TouchableOpacity>
-
-      {connectionState !== 'connected' && (
-        <Text style={styles.hint}>Connect a heart rate monitor to begin</Text>
-      )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    padding: 20,
-    gap: 16,
+    backgroundColor: colors.bg.primary,
+    padding: spacing.lg,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 4,
+    marginBottom: spacing.xl,
   },
   title: {
+    color: colors.text.primary,
     fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 1,
+    fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 4,
+    color: colors.text.secondary,
+    fontSize: typography.size.base,
   },
-  section: {
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  button: {
-    backgroundColor: '#333',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonDanger: {
-    backgroundColor: '#c62828',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  deviceRow: {
+  zoneRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#2a2a2a',
-    padding: 12,
-    borderRadius: 8,
+    gap: spacing.sm,
   },
-  deviceName: {
-    color: '#fff',
-    fontSize: 14,
+  zoneCard: {
+    flex: 1,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
   },
-  deviceRssi: {
-    color: '#888',
-    fontSize: 12,
+  zoneNumber: {
+    color: colors.text.secondary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+  },
+  zoneLabel: {
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+  },
+  zoneRange: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.mono,
+  },
+  warning: {
+    marginTop: spacing.base,
+    padding: spacing.md,
+    backgroundColor: colors.action.destructiveBg,
+    borderRadius: radii.md,
+  },
+  warningText: {
+    color: colors.status.error,
+    fontSize: typography.size.md,
+    textAlign: 'center',
+  },
+  spacer: {
+    flex: 1,
   },
   startButton: {
-    backgroundColor: '#1976D2',
-    paddingVertical: 18,
-    borderRadius: 12,
+    backgroundColor: colors.action.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
     alignItems: 'center',
-    marginTop: 8,
   },
   startButtonDisabled: {
-    backgroundColor: '#333',
+    backgroundColor: colors.bg.elevated,
     opacity: 0.6,
   },
   startButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
     letterSpacing: 0.5,
-  },
-  hint: {
-    color: '#666',
-    fontSize: 13,
-    textAlign: 'center',
   },
 });

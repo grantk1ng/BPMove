@@ -1,14 +1,55 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, ScrollView} from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Switch,
+  Alert,
+} from 'react-native';
 import {ServiceRegistry} from '../core/ServiceRegistry';
 import {eventBus} from '../core/EventBus';
-import type {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
+import {useHeartRate} from '../modules/heartrate/useHeartRate';
+import {usePreferences} from '../modules/preferences/usePreferences';
+import {
+  HR_ZONE_PRESETS,
+  calculateZonesFromAge,
+} from '../modules/algorithm/presets';
 import {SPOTIFY_CLIENT_ID} from '../config/env';
+import {colors, typography, spacing, radii} from '../theme';
+import type {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
 
-export function SettingsScreen({navigation}: {navigation: {navigate: (screen: string) => void}}) {
+export function SettingsScreen({
+  navigation,
+}: {
+  navigation: {navigate: (screen: string) => void};
+}) {
+  const {connectionState, devices, startScan, stopScan, connect, disconnect} =
+    useHeartRate();
+  const {
+    loaded,
+    age,
+    setAge,
+    showGraph,
+    setShowGraph,
+    pairedDevice,
+    setPairedDevice,
+    clearPairedDevice,
+    customZones,
+    setCustomZones,
+  } = usePreferences();
+
   const [providerName, setProviderName] = useState<string>('none');
   const [trackCount, setTrackCount] = useState(0);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const baseZones = age ? calculateZonesFromAge(age) : HR_ZONE_PRESETS;
+  const zones = customZones
+    ? customZones.map((z, i) => ({...z, color: baseZones[i]?.color ?? '#888'}))
+    : baseZones;
 
   useEffect(() => {
     try {
@@ -38,58 +79,289 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
   }, []);
 
   useEffect(() => {
-    const offReady = eventBus.on('provider:ready', ({providerName: name, trackCount: count}) => {
-      setProviderName(name);
-      setTrackCount(count);
-    });
-    const offError = eventBus.on('provider:error', ({providerName: name, error}) => {
-      if (name === 'spotify') {
-        setSpotifyError(error);
-      }
-    });
+    const offReady = eventBus.on(
+      'provider:ready',
+      ({providerName: name, trackCount: count}) => {
+        setProviderName(name);
+        setTrackCount(count);
+      },
+    );
+    const offError = eventBus.on(
+      'provider:error',
+      ({providerName: name, error}) => {
+        if (name === 'spotify') {
+          setSpotifyError(error);
+        }
+      },
+    );
     return () => {
       offReady();
       offError();
     };
   }, []);
 
-  const handleDebugPress = useCallback(() => {
-    navigation.navigate('Debug');
-  }, [navigation]);
+  const handleEditAge = useCallback(() => {
+    Alert.prompt(
+      'Enter Your Age',
+      'Must be at least 13. Used to calculate HR zones.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Save',
+          onPress: async (value?: string) => {
+            const parsed = parseInt(value ?? '', 10);
+            if (isNaN(parsed) || parsed < 13) {
+              Alert.alert('Invalid Age', 'You must be at least 13 years old.');
+              return;
+            }
+            await setAge(parsed);
+          },
+        },
+      ],
+      'plain-text',
+      age ? String(age) : '',
+      'number-pad',
+    );
+  }, [age, setAge]);
+
+  const handleEditZone = useCallback(
+    (index: number, field: 'minBPM' | 'maxBPM') => {
+      const current = zones[index];
+      const fieldLabel = field === 'minBPM' ? 'Min' : 'Max';
+      Alert.prompt(
+        `${current.name} — ${fieldLabel} BPM`,
+        'Enter heart rate value',
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Save',
+            onPress: async (value?: string) => {
+              const parsed = parseInt(value ?? '', 10);
+              if (isNaN(parsed) || parsed < 40 || parsed > 220) {
+                Alert.alert('Invalid', 'Enter a value between 40 and 220.');
+                return;
+              }
+              const updated = zones.map((z, i) => {
+                if (i !== index) {
+                  return {name: z.name, minBPM: z.minBPM, maxBPM: z.maxBPM};
+                }
+                return {
+                  name: z.name,
+                  minBPM: field === 'minBPM' ? parsed : z.minBPM,
+                  maxBPM: field === 'maxBPM' ? parsed : z.maxBPM,
+                };
+              });
+              await setCustomZones(updated);
+            },
+          },
+        ],
+        'plain-text',
+        String(current[field]),
+        'number-pad',
+      );
+    },
+    [zones, setCustomZones],
+  );
+
+  const handleResetZones = useCallback(async () => {
+    await setCustomZones(
+      baseZones.map(z => ({name: z.name, minBPM: z.minBPM, maxBPM: z.maxBPM})),
+    );
+  }, [baseZones, setCustomZones]);
+
+  const handleScanBLE = useCallback(() => {
+    setScanning(true);
+    startScan();
+    setTimeout(() => {
+      stopScan();
+      setScanning(false);
+    }, 10000);
+  }, [startScan, stopScan]);
+
+  const handleConnectDevice = useCallback(
+    async (deviceId: string, deviceName: string | null) => {
+      await connect(deviceId);
+      await setPairedDevice({id: deviceId, name: deviceName});
+      stopScan();
+      setScanning(false);
+    },
+    [connect, setPairedDevice, stopScan],
+  );
+
+  const handleDisconnectDevice = useCallback(async () => {
+    await disconnect();
+    await clearPairedDevice();
+  }, [disconnect, clearPairedDevice]);
+
+  if (!loaded) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Music Provider */}
+      {/* HR Zone Customization */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Music Provider</Text>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Active Provider</Text>
-          <Text style={styles.rowValue}>{providerName}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Tracks Loaded</Text>
-          <Text style={styles.rowValue}>{trackCount}</Text>
-        </View>
+        <Text style={styles.sectionTitle}>Heart Rate Zones</Text>
+
+        <TouchableOpacity style={styles.row} onPress={handleEditAge}>
+          <Text style={styles.rowLabel}>Age</Text>
+          <Text style={styles.rowValue}>{age ?? 'Not set'}</Text>
+        </TouchableOpacity>
+
+        {zones.map((zone, index) => (
+          <View key={zone.name} style={styles.row}>
+            <View style={styles.zoneNameRow}>
+              <View
+                style={[styles.zoneDot, {backgroundColor: zone.color}]}
+              />
+              <Text style={styles.rowLabel}>{zone.name}</Text>
+            </View>
+            {advancedOpen ? (
+              <View style={styles.zoneEditRow}>
+                <TouchableOpacity
+                  onPress={() => handleEditZone(index, 'minBPM')}>
+                  <Text style={styles.zoneEditValue}>{zone.minBPM}</Text>
+                </TouchableOpacity>
+                <Text style={styles.zoneDash}>–</Text>
+                <TouchableOpacity
+                  onPress={() => handleEditZone(index, 'maxBPM')}>
+                  <Text style={styles.zoneEditValue}>{zone.maxBPM}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.rowValue}>
+                {zone.minBPM}–{zone.maxBPM} BPM
+              </Text>
+            )}
+          </View>
+        ))}
+
+        <TouchableOpacity
+          onPress={() => setAdvancedOpen(!advancedOpen)}
+          style={styles.advancedToggle}>
+          <Text style={styles.advancedText}>
+            {advancedOpen ? 'Done' : 'Customize Zones'}
+          </Text>
+        </TouchableOpacity>
+
+        {advancedOpen && customZones && (
+          <TouchableOpacity onPress={handleResetZones}>
+            <Text style={styles.resetText}>Reset to defaults</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Spotify */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Spotify</Text>
+        <Text style={styles.sectionDescription}>
+          BPMove uses your Spotify library to match music BPM to your heart rate
+          zone.
+        </Text>
+
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Status</Text>
-          <Text style={[styles.rowValue, !SPOTIFY_CLIENT_ID && styles.rowValueWarn]}>
-            {SPOTIFY_CLIENT_ID ? 'Configured' : 'Not Configured'}
+          <Text
+            style={[
+              styles.rowValue,
+              !SPOTIFY_CLIENT_ID && {color: colors.status.warning},
+            ]}>
+            {SPOTIFY_CLIENT_ID ? 'Connected' : 'Not Connected'}
           </Text>
         </View>
-        {!SPOTIFY_CLIENT_ID && (
-          <Text style={styles.hint}>
-            Add SPOTIFY_CLIENT_ID and RAPIDAPI_KEY to your .env file to enable
-            Spotify integration.
+
+        {spotifyError && <Text style={styles.errorText}>{spotifyError}</Text>}
+
+        <TouchableOpacity style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>
+            {SPOTIFY_CLIENT_ID ? 'Disconnect' : 'Connect Spotify'}
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* BLE Device */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Heart Rate Monitor</Text>
+
+        {pairedDevice ? (
+          <>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Device</Text>
+              <Text style={styles.rowValue}>
+                {pairedDevice.name ?? 'Unknown Device'}
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Status</Text>
+              <Text
+                style={[
+                  styles.rowValue,
+                  {
+                    color:
+                      connectionState === 'connected'
+                        ? colors.status.success
+                        : colors.text.secondary,
+                  },
+                ]}>
+                {connectionState === 'connected' ? 'Connected' : 'Disconnected'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleDisconnectDevice}>
+              <Text style={styles.actionButtonText}>Disconnect Device</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleScanBLE}
+              disabled={scanning}>
+              <Text style={styles.actionButtonText}>
+                {scanning ? 'Scanning...' : 'Pair New Device'}
+              </Text>
+            </TouchableOpacity>
+
+            {devices.length > 0 && (
+              <View style={styles.deviceList}>
+                {devices.map(device => (
+                  <TouchableOpacity
+                    key={device.id}
+                    style={styles.deviceRow}
+                    onPress={() =>
+                      handleConnectDevice(device.id, device.name)
+                    }>
+                    <Text style={styles.deviceName}>
+                      {device.name ?? 'Unknown'}
+                    </Text>
+                    <Text style={styles.deviceConnect}>Connect</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
         )}
-        {spotifyError && (
-          <Text style={styles.errorText}>{spotifyError}</Text>
-        )}
+      </View>
+
+      {/* Session Preferences */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Session</Text>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Show live HR graph</Text>
+          <Switch
+            value={showGraph}
+            onValueChange={setShowGraph}
+            trackColor={{
+              false: colors.bg.elevated,
+              true: colors.action.primary,
+            }}
+          />
+        </View>
       </View>
 
       {/* About */}
@@ -97,19 +369,45 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>App</Text>
-          <Text style={styles.rowValue}>BPMove</Text>
+          <Text style={styles.rowValue}>BPMove v1.0</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.rowLabel}>Project</Text>
-          <Text style={styles.rowValue}>Samford CS Capstone</Text>
+          <Text style={styles.rowLabel}>Developer</Text>
+          <Text style={styles.rowValue}>Grant King</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Advisor</Text>
+          <Text style={styles.rowValue}>Dr. Brian Toone</Text>
         </View>
       </View>
 
-      {/* Debug */}
+      {/* Developer */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Developer</Text>
-        <TouchableOpacity style={styles.debugButton} onPress={handleDebugPress}>
-          <Text style={styles.debugButtonText}>Open Debug Console</Text>
+        <Text style={[styles.sectionTitle, {color: colors.text.muted}]}>
+          Developer
+        </Text>
+        <View style={styles.row}>
+          <Text style={[styles.rowLabel, {color: colors.text.muted}]}>
+            Provider
+          </Text>
+          <Text style={[styles.rowValue, {color: colors.text.muted}]}>
+            {providerName}
+          </Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={[styles.rowLabel, {color: colors.text.muted}]}>
+            Tracks
+          </Text>
+          <Text style={[styles.rowValue, {color: colors.text.muted}]}>
+            {trackCount}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.actionButton, {backgroundColor: colors.bg.elevated}]}
+          onPress={() => navigation.navigate('Debug')}>
+          <Text style={[styles.actionButtonText, {color: colors.text.muted}]}>
+            Open Debug Console
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -119,63 +417,135 @@ export function SettingsScreen({navigation}: {navigation: {navigate: (screen: st
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.bg.primary,
   },
   content: {
-    padding: 16,
-    gap: 24,
+    padding: spacing.base,
+    gap: spacing.xl,
+    paddingBottom: 40,
+  },
+  loadingText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.base,
+    textAlign: 'center',
+    marginTop: 40,
   },
   section: {
-    gap: 8,
+    gap: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
+    letterSpacing: typography.letterSpacing.wide,
+    fontFamily: typography.family.mono,
+    marginBottom: spacing.xs,
+  },
+  sectionDescription: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.md,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#252525',
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radii.md,
     padding: 14,
-    borderRadius: 8,
   },
   rowLabel: {
-    color: '#ccc',
-    fontSize: 15,
+    color: colors.text.secondary,
+    fontSize: typography.size.base,
   },
   rowValue: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.medium,
   },
-  rowValueWarn: {
-    color: '#FF9800',
+  zoneNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  hint: {
-    color: '#666',
-    fontSize: 13,
-    lineHeight: 18,
-    paddingHorizontal: 4,
+  zoneDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  debugButton: {
-    backgroundColor: '#333',
-    paddingVertical: 14,
-    borderRadius: 8,
+  zoneEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  zoneEditValue: {
+    color: colors.action.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.semibold,
+    fontVariant: ['tabular-nums'],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  zoneDash: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.base,
+  },
+  advancedToggle: {
+    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  debugButtonText: {
-    color: '#aaa',
-    fontSize: 15,
-    fontWeight: '500',
+  advancedText: {
+    color: colors.action.primary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+  },
+  resetText: {
+    color: colors.text.tertiary,
+    fontSize: typography.size.sm,
+    textAlign: 'center',
+  },
+  actionButton: {
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingVertical: 14,
+    borderRadius: radii.md,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.medium,
   },
   errorText: {
-    color: '#FF5252',
-    fontSize: 13,
+    color: colors.status.error,
+    fontSize: typography.size.md,
     lineHeight: 18,
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
+  },
+  deviceList: {
+    gap: spacing.sm,
+  },
+  deviceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radii.md,
+    padding: 14,
+  },
+  deviceName: {
+    color: colors.text.primary,
+    fontSize: typography.size.base,
+  },
+  deviceConnect: {
+    color: colors.action.primary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
   },
 });

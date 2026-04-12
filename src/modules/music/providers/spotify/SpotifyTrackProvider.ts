@@ -73,14 +73,6 @@ export class SpotifyTrackProvider implements TrackProvider {
       console.log('[Spotify] Auth success');
       this.accessToken = token;
 
-      console.log('[Spotify] Checking for active device...');
-      const device = await WebPlayback.ensureActiveDevice(this.accessToken);
-      if (!device.ok) {
-        console.log(`[Spotify] Device check failed: ${device.error}`);
-        return {ok: false, error: device.error};
-      }
-      console.log(`[Spotify] Device ready: ${device.data}`);
-
       return {ok: true, data: true};
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -143,6 +135,12 @@ export class SpotifyTrackProvider implements TrackProvider {
   async playTrack(track: TrackMetadata): Promise<Result<void>> {
     if (!this.accessToken) {
       return {ok: false, error: 'Not authenticated'};
+    }
+
+    const device = await WebPlayback.ensureActiveDevice(this.accessToken);
+    if (!device.ok) {
+      console.log(`[Spotify] No active device: ${device.error}`);
+      return {ok: false, error: device.error};
     }
 
     const uri = typeof track.url === 'string' ? track.url : '';
