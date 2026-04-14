@@ -170,4 +170,84 @@ describe('SessionLogger', () => {
     expect(log.timeSeries[0].currentTrackId).toBeNull();
     expect(log.timeSeries[0].currentMode).toBe('MAINTAIN');
   });
+
+  it('logs music:error events', () => {
+    logger.start({targetZone: {minBPM: 140, maxBPM: 160}});
+
+    eventBus.emit('music:error', {message: 'Track not found'});
+    eventBus.emit('music:error', {message: 'Playback failed'});
+
+    const log = logger.stop();
+    const errors = log.entries.filter(e => e.type === 'music_error');
+    expect(errors).toHaveLength(2);
+    expect(errors[0].data.message).toBe('Track not found');
+    expect(log.metadata.musicErrorCount).toBe(2);
+  });
+
+  it('logs music:trackSwitchBlocked events', () => {
+    logger.start({targetZone: {minBPM: 140, maxBPM: 160}});
+
+    eventBus.emit('music:trackSwitchBlocked', {
+      reason: 'cooldown',
+      cooldownRemainingMs: 8000,
+    });
+
+    const log = logger.stop();
+    const blocked = log.entries.filter(
+      e => e.type === 'music_track_switch_blocked',
+    );
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].data.cooldownRemainingMs).toBe(8000);
+    expect(log.metadata.trackSwitchBlockedCount).toBe(1);
+  });
+
+  it('logs provider lifecycle events', () => {
+    logger.start({targetZone: {minBPM: 140, maxBPM: 160}});
+
+    eventBus.emit('provider:loading', {providerName: 'spotify'});
+    eventBus.emit('provider:ready', {providerName: 'spotify', trackCount: 15});
+
+    const log = logger.stop();
+    const loading = log.entries.filter(e => e.type === 'provider_loading');
+    const ready = log.entries.filter(e => e.type === 'provider_ready');
+    expect(loading).toHaveLength(1);
+    expect(loading[0].data.providerName).toBe('spotify');
+    expect(ready).toHaveLength(1);
+    expect(ready[0].data.trackCount).toBe(15);
+  });
+
+  it('logs provider:error events', () => {
+    logger.start({targetZone: {minBPM: 140, maxBPM: 160}});
+
+    eventBus.emit('provider:error', {
+      providerName: 'spotify',
+      error: 'Auth token expired',
+    });
+
+    const log = logger.stop();
+    const errors = log.entries.filter(e => e.type === 'provider_error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].data.error).toBe('Auth token expired');
+  });
+
+  it('logs provider:fallback events and tracks in metadata', () => {
+    logger.start({targetZone: {minBPM: 140, maxBPM: 160}});
+
+    eventBus.emit('provider:fallback', {
+      from: 'spotify',
+      to: 'local',
+      reason: 'Auth failed',
+    });
+
+    const log = logger.stop();
+    const fallbacks = log.entries.filter(e => e.type === 'provider_fallback');
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0].data.from).toBe('spotify');
+    expect(log.metadata.providerFallbacks).toHaveLength(1);
+    expect(log.metadata.providerFallbacks[0]).toEqual({
+      from: 'spotify',
+      to: 'local',
+      reason: 'Auth failed',
+    });
+  });
 });
