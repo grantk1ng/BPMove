@@ -46,7 +46,7 @@ export class SpotifyTrackProvider implements TrackProvider {
 
   async isAvailable(): Promise<Result<boolean>> {
     if (!SPOTIFY_CLIENT_ID) {
-      return {ok: true, data: false};
+      return {ok: false, error: 'Spotify Client ID not configured — add SPOTIFY_CLIENT_ID to .env'};
     }
 
     try {
@@ -246,7 +246,7 @@ export class SpotifyTrackProvider implements TrackProvider {
     const allTracks: SpotifyLibraryTrack[] = [];
     let offset = 0;
     const limit = 50;
-    const maxTracks = 20;
+    const maxTracks = 200;
 
     while (offset < maxTracks) {
       const response = await fetch(

@@ -89,7 +89,8 @@ describe('SpotifyTrackProvider', () => {
       Object.defineProperty(envModule, 'SPOTIFY_CLIENT_ID', {value: '', writable: true});
       const provider = new SpotifyTrackProvider();
       const result = await provider.isAvailable();
-      expect(result).toEqual({ok: true, data: false});
+      expect(result.ok).toBe(false);
+      expect((result as {ok: false; error: string}).error).toContain('Spotify Client ID not configured');
       Object.defineProperty(envModule, 'SPOTIFY_CLIENT_ID', {value: original, writable: true});
     });
 

@@ -90,6 +90,46 @@ export class TrackProviderManager {
     return this.providerErrors.get(providerName) ?? null;
   }
 
+  async connectProvider(name: string): Promise<void> {
+    const provider = this.providers.find(p => p.info.name === name);
+    if (!provider) {
+      eventBus.emit('provider:error', {providerName: name, error: 'Provider not found'});
+      return;
+    }
+
+    this.providerErrors.delete(name);
+    eventBus.emit('provider:loading', {providerName: name});
+
+    const available = await provider.isAvailable();
+    if (!available.ok || !available.data) {
+      const error = available.ok ? 'Provider not available' : available.error;
+      this.providerErrors.set(name, error);
+      eventBus.emit('provider:error', {providerName: name, error});
+      return;
+    }
+
+    const result = await provider.loadTracks();
+    if (!result.ok) {
+      this.providerErrors.set(name, result.error);
+      eventBus.emit('provider:error', {providerName: name, error: result.error});
+      return;
+    }
+
+    // Destroy previous active provider if switching
+    if (this.activeProvider && this.activeProvider.info.name !== name) {
+      await this.activeProvider.stop();
+    }
+
+    this.libraryManager.loadTracks(result.data);
+    this.musicService.setActiveProvider(provider);
+    this.activeProvider = provider;
+
+    eventBus.emit('provider:ready', {
+      providerName: name,
+      trackCount: result.data.length,
+    });
+  }
+
   async destroy(): Promise<void> {
     for (const provider of this.providers) {
       await provider.destroy();

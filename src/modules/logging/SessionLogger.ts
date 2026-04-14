@@ -39,6 +39,9 @@ export class SessionLogger {
   private lastReadingTimestamp: number | null = null;
   private targetZoneMin = 0;
   private targetZoneMax = 0;
+  private trackSwitchBlockedCount = 0;
+  private musicErrorCount = 0;
+  private providerFallbacks: Array<{from: string; to: string; reason: string}> = [];
 
   start(config: Record<string, unknown>): string {
     this.sessionId = generateId();
@@ -56,6 +59,9 @@ export class SessionLogger {
     this.cachedTrack = null;
     this.algorithmConfig = config;
     this.active = true;
+    this.trackSwitchBlockedCount = 0;
+    this.musicErrorCount = 0;
+    this.providerFallbacks = [];
     this.metricsComputer = new SessionMetricsComputer();
 
     const zone = config.targetZone as {minBPM: number; maxBPM: number} | undefined;
@@ -83,6 +89,24 @@ export class SessionLogger {
     );
     this.unsubscribers.push(
       eventBus.on('hr:disconnected', this.onDeviceDisconnected),
+    );
+    this.unsubscribers.push(
+      eventBus.on('music:error', this.onMusicError),
+    );
+    this.unsubscribers.push(
+      eventBus.on('music:trackSwitchBlocked', this.onTrackSwitchBlocked),
+    );
+    this.unsubscribers.push(
+      eventBus.on('provider:loading', this.onProviderLoading),
+    );
+    this.unsubscribers.push(
+      eventBus.on('provider:ready', this.onProviderReady),
+    );
+    this.unsubscribers.push(
+      eventBus.on('provider:error', this.onProviderError),
+    );
+    this.unsubscribers.push(
+      eventBus.on('provider:fallback', this.onProviderFallback),
     );
 
     this.addEntry('session_start', {config});
@@ -296,6 +320,59 @@ export class SessionLogger {
     });
   };
 
+  private onMusicError = (event: {message: string}): void => {
+    this.musicErrorCount++;
+    this.addEntry('music_error', {message: event.message});
+  };
+
+  private onTrackSwitchBlocked = (event: {
+    reason: string;
+    cooldownRemainingMs: number;
+  }): void => {
+    this.trackSwitchBlockedCount++;
+    this.addEntry('music_track_switch_blocked', {
+      reason: event.reason,
+      cooldownRemainingMs: event.cooldownRemainingMs,
+    });
+  };
+
+  private onProviderLoading = (event: {providerName: string}): void => {
+    this.addEntry('provider_loading', {providerName: event.providerName});
+  };
+
+  private onProviderReady = (event: {
+    providerName: string;
+    trackCount: number;
+  }): void => {
+    this.addEntry('provider_ready', {
+      providerName: event.providerName,
+      trackCount: event.trackCount,
+    });
+  };
+
+  private onProviderError = (event: {
+    providerName: string;
+    error: string;
+  }): void => {
+    this.addEntry('provider_error', {
+      providerName: event.providerName,
+      error: event.error,
+    });
+  };
+
+  private onProviderFallback = (event: {
+    from: string;
+    to: string;
+    reason: string;
+  }): void => {
+    this.providerFallbacks.push(event);
+    this.addEntry('provider_fallback', {
+      from: event.from,
+      to: event.to,
+      reason: event.reason,
+    });
+  };
+
   private computeMetadata(): SessionMetadata {
     const hrs = this.hrReadings;
     return {
@@ -314,6 +391,9 @@ export class SessionLogger {
       selectionAccuracyScores: [],
       hrResponseTimes: [],
       avgHrResponseMs: null,
+      trackSwitchBlockedCount: this.trackSwitchBlockedCount,
+      musicErrorCount: this.musicErrorCount,
+      providerFallbacks: [...this.providerFallbacks],
     };
   }
 }

@@ -8,6 +8,12 @@ export type LogEntryType =
   | 'algorithm_mode_change'
   | 'music_change'
   | 'music_playback'
+  | 'music_error'
+  | 'music_track_switch_blocked'
+  | 'provider_loading'
+  | 'provider_ready'
+  | 'provider_error'
+  | 'provider_fallback'
   | 'session_start'
   | 'session_end'
   | 'device_connected'
@@ -80,6 +86,9 @@ export interface SessionMetadata {
     responseMs: number | null;
   }>;
   avgHrResponseMs: number | null;
+  trackSwitchBlockedCount: number;
+  musicErrorCount: number;
+  providerFallbacks: Array<{from: string; to: string; reason: string}>;
 }
 
 /** Post-session derived metrics computed by SessionMetricsComputer */

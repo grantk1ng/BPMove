@@ -87,6 +87,9 @@ function makeSessionLog(): SessionLog {
       selectionAccuracyScores: [],
       hrResponseTimes: [],
       avgHrResponseMs: null,
+      trackSwitchBlockedCount: 0,
+      musicErrorCount: 0,
+      providerFallbacks: [],
     },
   };
 }
