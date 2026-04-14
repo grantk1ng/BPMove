@@ -16,7 +16,6 @@ import {
   HR_ZONE_PRESETS,
   calculateZonesFromAge,
 } from '../modules/algorithm/presets';
-import {SPOTIFY_CLIENT_ID} from '../config/env';
 import {colors, typography, spacing, radii} from '../theme';
 import type {TrackProviderManager} from '../modules/music/providers/TrackProviderManager';
 
@@ -43,6 +42,7 @@ export function SettingsScreen({
   const [providerName, setProviderName] = useState<string>('none');
   const [trackCount, setTrackCount] = useState(0);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  const [spotifyLoading, setSpotifyLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -79,11 +79,23 @@ export function SettingsScreen({
   }, []);
 
   useEffect(() => {
+    const offLoading = eventBus.on(
+      'provider:loading',
+      ({providerName: name}) => {
+        if (name === 'spotify') {
+          setSpotifyLoading(true);
+          setSpotifyError(null);
+        }
+      },
+    );
     const offReady = eventBus.on(
       'provider:ready',
       ({providerName: name, trackCount: count}) => {
         setProviderName(name);
         setTrackCount(count);
+        if (name === 'spotify') {
+          setSpotifyLoading(false);
+        }
       },
     );
     const offError = eventBus.on(
@@ -91,10 +103,12 @@ export function SettingsScreen({
       ({providerName: name, error}) => {
         if (name === 'spotify') {
           setSpotifyError(error);
+          setSpotifyLoading(false);
         }
       },
     );
     return () => {
+      offLoading();
       offReady();
       offError();
     };
@@ -169,6 +183,16 @@ export function SettingsScreen({
     );
   }, [baseZones, setCustomZones]);
 
+  const handleConnectSpotify = useCallback(async () => {
+    try {
+      const pm = ServiceRegistry.get<TrackProviderManager>('trackProvider');
+      await pm.connectProvider('spotify');
+    } catch {
+      setSpotifyError('Failed to connect to Spotify');
+      setSpotifyLoading(false);
+    }
+  }, []);
+
   const handleScanBLE = useCallback(() => {
     setScanning(true);
     startScan();
@@ -187,6 +211,13 @@ export function SettingsScreen({
     },
     [connect, setPairedDevice, stopScan],
   );
+
+  const handleReconnectDevice = useCallback(async () => {
+    if (!pairedDevice) {
+      return;
+    }
+    await connect(pairedDevice.id);
+  }, [pairedDevice, connect]);
 
   const handleDisconnectDevice = useCallback(async () => {
     await disconnect();
@@ -268,26 +299,46 @@ export function SettingsScreen({
           <Text
             style={[
               styles.rowValue,
-              !SPOTIFY_CLIENT_ID && {color: colors.status.warning},
+              {
+                color:
+                  providerName === 'spotify'
+                    ? colors.status.success
+                    : spotifyLoading
+                      ? colors.status.warning
+                      : colors.text.secondary,
+              },
             ]}>
-            {SPOTIFY_CLIENT_ID ? 'Connected' : 'Not Connected'}
+            {providerName === 'spotify'
+              ? `Connected — ${trackCount} tracks`
+              : spotifyLoading
+                ? 'Connecting...'
+                : 'Not Connected'}
           </Text>
         </View>
 
-        {spotifyError && <Text style={styles.errorText}>{spotifyError}</Text>}
+        {providerName !== 'spotify' && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleConnectSpotify}
+            disabled={spotifyLoading}>
+            <Text style={styles.actionButtonText}>
+              {spotifyLoading ? 'Connecting...' : 'Connect Spotify'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonText}>
-            {SPOTIFY_CLIENT_ID ? 'Disconnect' : 'Connect Spotify'}
-          </Text>
-        </TouchableOpacity>
+        {spotifyError && (
+          <View style={styles.spotifyErrorBox}>
+            <Text style={styles.spotifyErrorText}>{spotifyError}</Text>
+          </View>
+        )}
       </View>
 
       {/* BLE Device */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Heart Rate Monitor</Text>
 
-        {pairedDevice ? (
+        {pairedDevice && (
           <>
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Device</Text>
@@ -304,47 +355,73 @@ export function SettingsScreen({
                     color:
                       connectionState === 'connected'
                         ? colors.status.success
-                        : colors.text.secondary,
+                        : connectionState === 'connecting'
+                          ? colors.status.warning
+                          : colors.text.secondary,
                   },
                 ]}>
-                {connectionState === 'connected' ? 'Connected' : 'Disconnected'}
+                {connectionState === 'connected'
+                  ? 'Connected'
+                  : connectionState === 'connecting'
+                    ? 'Connecting...'
+                    : 'Disconnected'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleDisconnectDevice}>
-              <Text style={styles.actionButtonText}>Disconnect Device</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleScanBLE}
-              disabled={scanning}>
-              <Text style={styles.actionButtonText}>
-                {scanning ? 'Scanning...' : 'Pair New Device'}
-              </Text>
-            </TouchableOpacity>
-
-            {devices.length > 0 && (
-              <View style={styles.deviceList}>
-                {devices.map(device => (
-                  <TouchableOpacity
-                    key={device.id}
-                    style={styles.deviceRow}
-                    onPress={() =>
-                      handleConnectDevice(device.id, device.name)
-                    }>
-                    <Text style={styles.deviceName}>
-                      {device.name ?? 'Unknown'}
-                    </Text>
-                    <Text style={styles.deviceConnect}>Connect</Text>
-                  </TouchableOpacity>
-                ))}
+            {connectionState === 'connected' ? (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleDisconnectDevice}>
+                <Text style={styles.actionButtonText}>Disconnect Device</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.deviceActions}>
+                <TouchableOpacity
+                  style={[styles.actionButton, {flex: 1}]}
+                  onPress={handleReconnectDevice}
+                  disabled={connectionState === 'connecting'}>
+                  <Text style={styles.actionButtonText}>
+                    {connectionState === 'connecting'
+                      ? 'Connecting...'
+                      : 'Connect'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, {flex: 1}]}
+                  onPress={handleDisconnectDevice}>
+                  <Text style={styles.actionButtonText}>Forget</Text>
+                </TouchableOpacity>
               </View>
             )}
           </>
+        )}
+
+        {!pairedDevice && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleScanBLE}
+            disabled={scanning}>
+            <Text style={styles.actionButtonText}>
+              {scanning ? 'Scanning...' : 'Pair New Device'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {devices.length > 0 && (
+          <View style={styles.deviceList}>
+            {devices.map(device => (
+              <TouchableOpacity
+                key={device.id}
+                style={styles.deviceRow}
+                onPress={() =>
+                  handleConnectDevice(device.id, device.name)
+                }>
+                <Text style={styles.deviceName}>
+                  {device.name ?? 'Unknown'}
+                </Text>
+                <Text style={styles.deviceConnect}>Connect</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
       </View>
 
@@ -525,6 +602,20 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     lineHeight: 18,
     paddingHorizontal: spacing.xs,
+  },
+  spotifyErrorBox: {
+    backgroundColor: colors.action.destructiveBg,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  spotifyErrorText: {
+    color: colors.status.error,
+    fontSize: typography.size.md,
+    lineHeight: 20,
+  },
+  deviceActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   deviceList: {
     gap: spacing.sm,
