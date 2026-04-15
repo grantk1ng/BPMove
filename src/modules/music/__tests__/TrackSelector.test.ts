@@ -116,4 +116,36 @@ describe('selectTrack', () => {
     expect(result!.requestedBPM).toBe(150);
     expect(result!.actualBPM).toBe(145);
   });
+
+  it('uses a broader window in raise mode instead of forcing the top-end fallback', () => {
+    const library = makeLibrary([
+      makeTrack('steady', 140),
+      makeTrack('spike', 174),
+    ]);
+
+    const result = selectTrack(160, library, [], {
+      mode: 'RAISE',
+      triggeringHR: 145,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.track.id).toBe('steady');
+    expect(result!.bpmDelta).toBe(20);
+  });
+
+  it('still prefers tracks that are both in the raise window and clearly above current HR', () => {
+    const library = makeLibrary([
+      makeTrack('warm', 142),
+      makeTrack('push', 150),
+      makeTrack('max', 174),
+    ]);
+
+    const result = selectTrack(156, library, ['warm'], {
+      mode: 'RAISE',
+      triggeringHR: 142,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.track.id).toBe('push');
+  });
 });

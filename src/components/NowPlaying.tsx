@@ -2,6 +2,12 @@ import React from 'react';
 import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
 import {colors, typography, spacing, radii} from '../theme';
 import type {TrackMetadata} from '../modules/music/types';
+import {
+  MusicNoteIcon,
+  PauseIcon,
+  PlayIcon,
+  SkipIcon,
+} from './PlaybackIcons';
 
 interface Props {
   track: TrackMetadata | null;
@@ -39,7 +45,7 @@ export function NowPlaying({
         <Image source={{uri: track.artworkUrl}} style={styles.thumbnail} />
       ) : (
         <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-          <Text style={styles.thumbnailIcon}>♪</Text>
+          <MusicNoteIcon size={20} color={colors.text.tertiary} />
         </View>
       )}
       <View style={styles.info}>
@@ -65,11 +71,19 @@ export function NowPlaying({
       <View style={styles.controls}>
         <TouchableOpacity
           onPress={isPlaying ? onPause : onPlay}
-          style={styles.playButton}>
-          <Text style={styles.playIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+          style={styles.playButton}
+          activeOpacity={0.85}>
+          {isPlaying ? (
+            <PauseIcon size={18} color={colors.bg.primary} />
+          ) : (
+            <PlayIcon size={18} color={colors.bg.primary} />
+          )}
         </TouchableOpacity>
-        <TouchableOpacity onPress={onSkip} style={styles.skipButton}>
-          <Text style={styles.skipIcon}>⏭</Text>
+        <TouchableOpacity
+          onPress={onSkip}
+          style={styles.skipButton}
+          activeOpacity={0.85}>
+          <SkipIcon size={18} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -81,6 +95,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
     borderRadius: radii.xl,
     padding: spacing.md,
     gap: spacing.md,
@@ -94,10 +110,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.elevated,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  thumbnailIcon: {
-    color: colors.text.tertiary,
-    fontSize: 20,
   },
   empty: {
     color: colors.text.tertiary,
@@ -149,13 +161,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.bg.elevated,
+    backgroundColor: colors.text.primary,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  playIcon: {
-    fontSize: 18,
-    color: colors.text.primary,
   },
   skipButton: {
     width: 44,
@@ -164,9 +172,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.elevated,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  skipIcon: {
-    fontSize: 16,
-    color: colors.text.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
 });

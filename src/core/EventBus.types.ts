@@ -8,7 +8,11 @@ import type {
   AlgorithmState,
   AlgorithmMode,
 } from '../modules/algorithm/types';
-import type {TrackMetadata, PlaybackState} from '../modules/music/types';
+import type {
+  TrackMetadata,
+  PlaybackState,
+  ProviderPlaybackState,
+} from '../modules/music/types';
 
 /**
  * Central event map. Every event in the system is defined here.
@@ -28,6 +32,7 @@ export interface EventMap {
 
   'music:changed': TrackMetadata;
   'music:playbackStateChanged': PlaybackState;
+  'music:providerPlaybackChanged': ProviderPlaybackState;
   'music:error': {message: string};
   'music:trackEnded': {trackId: string};
 

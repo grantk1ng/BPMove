@@ -2,6 +2,12 @@ import React from 'react';
 import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
 import {colors, typography, spacing, radii} from '../theme';
 import type {TrackMetadata} from '../contracts';
+import {
+  MusicNoteIcon,
+  PauseIcon,
+  PlayIcon,
+  SkipIcon,
+} from './PlaybackIcons';
 
 interface ExpandedNowPlayingProps {
   track: TrackMetadata | null;
@@ -44,7 +50,7 @@ export function ExpandedNowPlaying({
         <Image source={{uri: track.artworkUrl}} style={styles.albumArt} />
       ) : (
         <View style={[styles.albumArt, styles.albumArtPlaceholder]}>
-          <Text style={styles.placeholderIcon}>♪</Text>
+          <MusicNoteIcon size={28} color={colors.text.tertiary} />
         </View>
       )}
 
@@ -58,74 +64,91 @@ export function ExpandedNowPlaying({
       <View style={styles.controls}>
         <TouchableOpacity
           onPress={isPlaying ? onPause : onPlay}
-          style={styles.controlButton}
+          style={[styles.controlButton, styles.primaryControlButton]}
+          activeOpacity={0.85}
           hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
-          <Text style={styles.controlIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+          {isPlaying ? (
+            <PauseIcon size={20} color={colors.bg.primary} />
+          ) : (
+            <PlayIcon size={20} color={colors.bg.primary} />
+          )}
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onSkip}
           style={styles.controlButton}
+          activeOpacity={0.85}
           hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
-          <Text style={styles.controlIcon}>⏭</Text>
+          <SkipIcon size={18} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const ALBUM_ART_SIZE = 140;
+const ALBUM_ART_SIZE = 100;
 
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   albumArt: {
     width: ALBUM_ART_SIZE,
     height: ALBUM_ART_SIZE,
-    borderRadius: radii.md,
-    marginBottom: spacing.md,
+    borderRadius: radii.lg,
+    marginBottom: spacing.base,
   },
   albumArtPlaceholder: {
     backgroundColor: colors.bg.elevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderIcon: {
-    color: colors.text.tertiary,
-    fontSize: 32,
-  },
   trackTitle: {
     color: colors.text.primary,
-    fontSize: typography.size.base,
+    fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
   trackArtist: {
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     fontSize: typography.size.md,
     fontFamily: typography.family.mono,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.base,
   },
   controls: {
     flexDirection: 'row',
-    gap: spacing.xl,
+    gap: spacing.md,
     alignItems: 'center',
   },
   controlButton: {
-    padding: spacing.sm,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  controlIcon: {
-    color: colors.text.secondary,
-    fontSize: 24,
+  primaryControlButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.text.primary,
+    borderColor: colors.text.primary,
   },
   collapsedContainer: {
     backgroundColor: colors.bg.card,
     borderWidth: 1,
     borderColor: colors.border.default,
-    borderRadius: radii.md,
+    borderRadius: radii.xl,
     padding: spacing.md,
     alignItems: 'center',
   },

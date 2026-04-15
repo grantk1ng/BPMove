@@ -122,7 +122,7 @@ describe('getPlaybackState', () => {
       json: () =>
         Promise.resolve({
           progress_ms: 45000,
-          item: {duration_ms: 210000},
+          item: {duration_ms: 210000, uri: 'spotify:track:abc'},
           is_playing: true,
         }),
     });
@@ -130,7 +130,12 @@ describe('getPlaybackState', () => {
     const result = await getPlaybackState('token');
     expect(result).toEqual({
       ok: true,
-      data: {progressMs: 45000, durationMs: 210000, isPlaying: true},
+      data: {
+        progressMs: 45000,
+        durationMs: 210000,
+        isPlaying: true,
+        trackUri: 'spotify:track:abc',
+      },
     });
   });
 

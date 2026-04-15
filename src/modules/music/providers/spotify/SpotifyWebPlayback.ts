@@ -26,6 +26,7 @@ export interface PlaybackState {
   progressMs: number;
   durationMs: number;
   isPlaying: boolean;
+  trackUri: string | null;
 }
 
 interface SpotifyDevice {
@@ -163,6 +164,7 @@ export async function getPlaybackState(
         progressMs: data.progress_ms ?? 0,
         durationMs: data.item?.duration_ms ?? 0,
         isPlaying: data.is_playing ?? false,
+        trackUri: typeof data.item?.uri === 'string' ? data.item.uri : null,
       },
     };
   } catch (err) {

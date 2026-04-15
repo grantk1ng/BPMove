@@ -26,7 +26,12 @@ jest.mock('../SpotifyWebPlayback', () => ({
   resume: jest.fn().mockResolvedValue({ok: true, data: undefined}),
   getPlaybackState: jest.fn().mockResolvedValue({
     ok: true,
-    data: {progressMs: 0, durationMs: 210000, isPlaying: true},
+    data: {
+      progressMs: 0,
+      durationMs: 210000,
+      isPlaying: true,
+      trackUri: 'spotify:track:track1',
+    },
   }),
 }));
 
@@ -244,7 +249,12 @@ describe('SpotifyTrackProvider', () => {
       // First poll: mid-track
       (WebPlayback.getPlaybackState as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        data: {progressMs: 100000, durationMs: 210000, isPlaying: true},
+        data: {
+          progressMs: 100000,
+          durationMs: 210000,
+          isPlaying: true,
+          trackUri: 'spotify:track:track1',
+        },
       });
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
@@ -253,7 +263,12 @@ describe('SpotifyTrackProvider', () => {
       // Second poll: near end and not playing
       (WebPlayback.getPlaybackState as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        data: {progressMs: 209500, durationMs: 210000, isPlaying: false},
+        data: {
+          progressMs: 209500,
+          durationMs: 210000,
+          isPlaying: false,
+          trackUri: 'spotify:track:track1',
+        },
       });
       jest.advanceTimersByTime(2000);
       await jest.runAllTimersAsync();
@@ -283,7 +298,12 @@ describe('SpotifyTrackProvider', () => {
 
       (WebPlayback.getPlaybackState as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        data: {progressMs: 50000, durationMs: 210000, isPlaying: false},
+        data: {
+          progressMs: 50000,
+          durationMs: 210000,
+          isPlaying: false,
+          trackUri: 'spotify:track:track1',
+        },
       });
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
@@ -305,6 +325,49 @@ describe('SpotifyTrackProvider', () => {
 
       expect(SpotifyAuth.endSession).toHaveBeenCalled();
       expect(provider.getStatus()).toBe('idle');
+    });
+  });
+
+  describe('provider playback sync', () => {
+    it('emits provider playback changes when Spotify switches tracks externally', async () => {
+      const provider = new SpotifyTrackProvider();
+      await provider.isAvailable();
+
+      const handler = jest.fn();
+      eventBus.on('music:providerPlaybackChanged', handler);
+
+      await provider.playTrack({
+        id: 'spotify:track1',
+        title: 'Running Song',
+        artist: 'Artist A',
+        album: 'Album A',
+        durationSeconds: 210,
+        bpm: 130,
+        url: 'spotify:track:track1',
+        artworkUrl: null,
+        genre: null,
+      });
+
+      (WebPlayback.getPlaybackState as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        data: {
+          progressMs: 5000,
+          durationMs: 195000,
+          isPlaying: true,
+          trackUri: 'spotify:track:track2',
+        },
+      });
+
+      jest.advanceTimersByTime(2000);
+      await jest.runOnlyPendingTimersAsync();
+
+      expect(handler).toHaveBeenCalledWith({
+        providerName: 'spotify',
+        trackId: 'spotify:track2',
+        isPlaying: true,
+        positionSeconds: 5,
+        durationSeconds: 195,
+      });
     });
   });
 });
