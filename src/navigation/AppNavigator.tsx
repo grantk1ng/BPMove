@@ -1,13 +1,15 @@
-import React from 'react';
+import React, {useRef, useEffect, useCallback} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import type {NavigationProp} from '@react-navigation/native';
 import {SessionHomeScreen} from '../screens/SessionHomeScreen';
 import {ActiveSessionScreen} from '../screens/ActiveSessionScreen';
 import {HistoryScreen} from '../screens/HistoryScreen';
 import {SettingsScreen} from '../screens/SettingsScreen';
 import {DebugScreen} from '../screens/DebugScreen';
 import {OnboardingNavigator} from './OnboardingNavigator';
+import {eventBus} from '../core/EventBus';
 import {colors} from '../theme';
 import type {
   RootStackParamList,
@@ -51,6 +53,42 @@ function SessionNavigator() {
 }
 
 function MainTabs() {
+  const sessionActive = useRef(false);
+  const sessionTabFocused = useRef(true);
+
+  useEffect(() => {
+    const onStart = eventBus.on('session:started', () => {
+      sessionActive.current = true;
+    });
+    const onEnd = eventBus.on('session:ended', () => {
+      sessionActive.current = false;
+    });
+    return () => {
+      onStart();
+      onEnd();
+    };
+  }, []);
+
+  const handleSessionTabPress = useCallback(
+    (e: {preventDefault: () => void}) => {
+      // Only block the re-tap (popToTop) when a session is active
+      // Allow normal tab switching from other tabs
+      if (sessionActive.current && sessionTabFocused.current) {
+        e.preventDefault();
+      }
+    },
+    [],
+  );
+
+  const handleSessionTabFocus = useCallback(
+    (_nav: {navigation: NavigationProp<TabParamList>}) => ({
+      focus: () => { sessionTabFocused.current = true; },
+      blur: () => { sessionTabFocused.current = false; },
+      tabPress: handleSessionTabPress,
+    }),
+    [handleSessionTabPress],
+  );
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -72,6 +110,7 @@ function MainTabs() {
           headerShown: false,
           tabBarLabel: 'Session',
         }}
+        listeners={handleSessionTabFocus}
       />
       <Tab.Screen
         name="HistoryTab"

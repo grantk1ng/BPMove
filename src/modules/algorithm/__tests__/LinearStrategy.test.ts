@@ -264,17 +264,19 @@ describe('LinearStrategy', () => {
         smoothingWindow: 1,
       });
 
+      const now = Date.now();
       let state: AlgorithmState = {
         ...strategy.initialState(config),
         currentMode: 'RAISE',
-        modeEnteredAt: Date.now(),
+        modeEnteredAt: now,
         currentTargetBPM: 150,
         msSinceLastTargetChange: 0, // Just changed
+        hrHistory: [makeReading(120, now)], // Not first reading
       };
 
       // Reading 1 second later (cooldown not met)
       const result = strategy.compute(
-        makeReading(120, Date.now() + 1000),
+        makeReading(120, now + 1000),
         state,
         config,
       );

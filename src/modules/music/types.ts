@@ -32,6 +32,14 @@ export interface PlaybackState {
   targetBPM: number | null;
 }
 
+export interface ProviderPlaybackState {
+  providerName: string;
+  trackId: string | null;
+  isPlaying: boolean;
+  positionSeconds: number;
+  durationSeconds: number;
+}
+
 /** Result of track selection — includes reasoning for logging */
 export interface TrackSelection {
   track: TrackMetadata;

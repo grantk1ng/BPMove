@@ -12,6 +12,17 @@ export function usePlayback() {
   const [targetBPM, setTargetBPM] = useState<number | null>(null);
 
   useEffect(() => {
+    if (ServiceRegistry.has('music')) {
+      const service = ServiceRegistry.get<MusicPlayerService>('music');
+      const snapshot = service.getPlaybackSnapshot();
+      setCurrentTrack(snapshot.currentTrack);
+      setIsPlaying(snapshot.isPlaying);
+      setPosition(snapshot.positionSeconds);
+      setDuration(snapshot.durationSeconds);
+      setTargetBPM(snapshot.targetBPM);
+      service.refreshPlaybackState().catch(() => {});
+    }
+
     const unsubs = [
       eventBus.on('music:changed', (track: TrackMetadata) => {
         setCurrentTrack(track);

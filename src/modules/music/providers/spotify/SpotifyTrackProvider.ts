@@ -39,6 +39,8 @@ export class SpotifyTrackProvider implements TrackProvider {
   private tracks: TrackMetadata[] = [];
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private currentTrackId: string | null = null;
+  private lastObservedTrackId: string | null = null;
+  private lastObservedIsPlaying: boolean | null = null;
 
   getStatus(): ProviderStatus {
     return this.status;
@@ -147,6 +149,8 @@ export class SpotifyTrackProvider implements TrackProvider {
     const result = await WebPlayback.play(this.accessToken, uri);
     if (result.ok) {
       this.currentTrackId = track.id;
+      this.lastObservedTrackId = track.id;
+      this.lastObservedIsPlaying = true;
       this.startPolling();
     }
     return result;
@@ -206,6 +210,8 @@ export class SpotifyTrackProvider implements TrackProvider {
     this.accessToken = null;
     this.tracks = [];
     this.currentTrackId = null;
+    this.lastObservedTrackId = null;
+    this.lastObservedIsPlaying = null;
   }
 
   private startPolling(): void {
@@ -219,6 +225,25 @@ export class SpotifyTrackProvider implements TrackProvider {
         if (!state.ok) {
           return;
         }
+
+        const nextTrackId =
+          this.toInternalTrackId(state.data.trackUri) ?? this.currentTrackId;
+        const trackChanged = nextTrackId !== this.lastObservedTrackId;
+        const playingChanged = this.lastObservedIsPlaying !== state.data.isPlaying;
+
+        if (trackChanged || playingChanged) {
+          this.currentTrackId = nextTrackId;
+          this.lastObservedTrackId = nextTrackId;
+          this.lastObservedIsPlaying = state.data.isPlaying;
+          eventBus.emit('music:providerPlaybackChanged', {
+            providerName: this.info.name,
+            trackId: nextTrackId,
+            isPlaying: state.data.isPlaying,
+            positionSeconds: state.data.progressMs / 1000,
+            durationSeconds: state.data.durationMs / 1000,
+          });
+        }
+
         const nearEnd =
           state.data.progressMs >= state.data.durationMs - 1000;
         if (nearEnd && !state.data.isPlaying && this.currentTrackId) {
@@ -238,6 +263,15 @@ export class SpotifyTrackProvider implements TrackProvider {
     }
   }
 
+  private toInternalTrackId(trackUri: string | null): string | null {
+    if (!trackUri) {
+      return null;
+    }
+
+    const spotifyId = trackUri.split(':').pop();
+    return spotifyId ? `spotify:${spotifyId}` : null;
+  }
+
   private async fetchUserLibrary(): Promise<SpotifyLibraryTrack[]> {
     if (!this.accessToken) {
       return [];
@@ -246,7 +280,7 @@ export class SpotifyTrackProvider implements TrackProvider {
     const allTracks: SpotifyLibraryTrack[] = [];
     let offset = 0;
     const limit = 50;
-    const maxTracks = 200;
+    const maxTracks = 150;
 
     while (offset < maxTracks) {
       const response = await fetch(

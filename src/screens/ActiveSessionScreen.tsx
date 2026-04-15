@@ -98,7 +98,9 @@ export function ActiveSessionScreen({
             // Best effort
           }
 
-          navigation.goBack();
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
         },
       },
     ]);
@@ -110,7 +112,10 @@ export function ActiveSessionScreen({
     if (sessionActive) {
       wasActive.current = true;
     } else if (wasActive.current) {
-      navigation.goBack();
+      wasActive.current = false;
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
     }
   }, [sessionActive, navigation]);
 

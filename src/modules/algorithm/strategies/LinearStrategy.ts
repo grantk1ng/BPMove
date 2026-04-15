@@ -183,8 +183,9 @@ export class LinearStrategy implements AlgorithmStrategy {
     // Determine if we should emit a new BPMTarget
     const bpmDelta = Math.abs(nextTargetBPM - state.currentTargetBPM);
     const cooldownMs = config.cooldownSeconds * 1000;
+    const isFirstReading = state.hrHistory.length === 0;
     const shouldEmitTarget =
-      bpmDelta >= 1 && msSinceLastTargetChange >= cooldownMs;
+      isFirstReading || (bpmDelta >= 1 && msSinceLastTargetChange >= cooldownMs);
 
     const roundedBPM = Math.round(nextTargetBPM);
 

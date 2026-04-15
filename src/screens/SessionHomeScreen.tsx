@@ -11,6 +11,7 @@ import {requestBlePermissions} from '../utils/permissions';
 import {startBackgroundSession} from '../modules/background';
 import type {HRZone} from '../modules/algorithm/types';
 import type {AdaptiveBPMEngine} from '../modules/algorithm/AdaptiveBPMEngine';
+import type {MusicPlayerService} from '../modules/music/MusicPlayerService';
 import type {SessionStackScreenProps} from '../navigation/types';
 
 export function SessionHomeScreen({
@@ -40,6 +41,8 @@ export function SessionHomeScreen({
         const engine = ServiceRegistry.get<AdaptiveBPMEngine>('algorithm');
         engine.updateConfig(config);
         engine.start();
+        const musicService = ServiceRegistry.get<MusicPlayerService>('music');
+        musicService.start();
         startSession(config as unknown as Record<string, unknown>);
         startBackgroundSession().catch(() => {});
         navigation.navigate('ActiveSession');

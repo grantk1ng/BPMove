@@ -21,6 +21,8 @@ export class AdaptiveBPMEngine {
   }
 
   start(): void {
+    this.stop();
+    this.resetState();
     this.unsubscribe = eventBus.on('hr:reading', this.onHeartRateReading);
   }
 
@@ -51,6 +53,10 @@ export class AdaptiveBPMEngine {
 
   destroy(): void {
     this.stop();
+  }
+
+  private resetState(): void {
+    this.state = this.strategy.initialState(this.config);
   }
 
   private onHeartRateReading = (reading: HeartRateReading): void => {

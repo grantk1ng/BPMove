@@ -72,6 +72,7 @@ describe('Demo Smoke Test', () => {
   let libraryManager: MusicLibraryManager;
   let musicService: MusicPlayerService;
   let logger: SessionLogger;
+  let providerCalls: string[];
 
   beforeEach(() => {
     ServiceRegistry.clear();
@@ -92,7 +93,8 @@ describe('Demo Smoke Test', () => {
     ServiceRegistry.register('logging', logger);
 
     // Load tracks and set provider
-    const {provider} = makeMockProvider();
+    const {provider, calls} = makeMockProvider();
+    providerCalls = calls;
     libraryManager.loadTracks(makeTracks());
     musicService.setActiveProvider(provider);
   });
@@ -164,8 +166,9 @@ describe('Demo Smoke Test', () => {
     }
 
     expect(targets.length).toBeGreaterThanOrEqual(1);
-    expect(targets[0].targetBPM).toBeGreaterThan(0);
-    expect(targets[0].mode).toBe('RAISE');
+    const raiseTarget = targets.find(target => target.mode === 'RAISE');
+    expect(raiseTarget).toBeDefined();
+    expect(raiseTarget!.targetBPM).toBeGreaterThan(0);
 
     engine.stop();
   });
@@ -264,6 +267,38 @@ describe('Demo Smoke Test', () => {
     const returnToMaintain = modeChanges.find(c => c.to === 'MAINTAIN');
     expect(returnToMaintain).toBeDefined();
 
+    engine.stop();
+  });
+
+  it('can start a second session immediately after stopping and saving the first', async () => {
+    musicService.start();
+
+    logger.start({
+      targetZone: {minBPM: 130, maxBPM: 150},
+    });
+    engine.start();
+    eventBus.emit('hr:reading', makeReading(140, 1_000));
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+    expect(providerCalls.filter(call => call === 'playTrack')).toHaveLength(1);
+
+    const firstLog = logger.stop();
+    expect(firstLog.entries.some(entry => entry.type === 'session_end')).toBe(true);
+    musicService.stop();
+    engine.stop();
+
+    logger.start({
+      targetZone: {minBPM: 130, maxBPM: 150},
+    });
+    musicService.start();
+    engine.start();
+    eventBus.emit('hr:reading', makeReading(140, 2_000));
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+    expect(providerCalls.filter(call => call === 'playTrack')).toHaveLength(2);
+
+    logger.stop();
+    musicService.stop();
     engine.stop();
   });
 });
